@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Service
+ServiceTypes=Krita/PythonPlugin
+X-KDE-Library=folio_layers
+X-Python-2-Compatible=false
+Name=Folio Layers
+Comment=Krita 图层管理 Docker 插件
