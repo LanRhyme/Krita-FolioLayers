@@ -549,7 +549,6 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if doc and doc.activeNode():
             opacity_255 = int(percent_val / 100.0 * 255)
             doc.activeNode().setOpacity(opacity_255)
-            self.refresh_canvas()
 
     def _filter_layers(self, text):
         search_kw = text.strip().lower()
