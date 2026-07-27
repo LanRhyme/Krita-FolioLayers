@@ -147,6 +147,12 @@ class LayerRowWidget(QWidget):
         self.vis_btn.clicked.connect(self._toggle_visibility)
         layout.addWidget(self.vis_btn)
 
+        self.pt_btn = QToolButton()
+        self.pt_btn.setFixedSize(18, 18)
+        self.pt_btn.setToolTip("穿透模式 (Pass Through)")
+        self.pt_btn.clicked.connect(self._toggle_pass_through)
+        layout.addWidget(self.pt_btn)
+
         self._init_native_styles()
         self.refresh_state()
 
@@ -160,6 +166,7 @@ class LayerRowWidget(QWidget):
         self.alpha_lock_btn.setStyleSheet(btn_style)
         self.lock_btn.setStyleSheet(btn_style)
         self.vis_btn.setStyleSheet(btn_style)
+        self.pt_btn.setStyleSheet(btn_style)
         self.select_btn.setStyleSheet(f"""
             QToolButton {{
                 background: transparent;
@@ -293,6 +300,14 @@ class LayerRowWidget(QWidget):
         self.lock_btn.setVisible(show_lock_vis)
         self.lock_btn.setIcon(get_lucide_icon("lock" if locked else "unlock", t.ACCENT if locked else t.TEXT_MUTED, 14))
 
+        # 穿透模式（仅图层组）
+        if is_group and hasattr(self.node, 'passThroughMode'):
+            pt = self.node.passThroughMode()
+            self.pt_btn.setVisible(show_lock_vis)
+            self.pt_btn.setIcon(get_lucide_icon("layers" if pt else "aperture", t.ACCENT if pt else t.TEXT_MUTED, 14))
+        else:
+            self.pt_btn.hide()
+
         # 锁定 Alpha 与 继承 Alpha
         try:
             alock = self.node.alphaLocked()
@@ -341,6 +356,13 @@ class LayerRowWidget(QWidget):
         if self.node and hasattr(self.node, 'setInheritAlpha'):
             new_ainherit = not self.node.inheritAlpha()
             self.node.setInheritAlpha(new_ainherit)
+            self.docker.refresh_canvas()
+            self.refresh_state()
+
+    def _toggle_pass_through(self):
+        if self.node and hasattr(self.node, 'setPassThroughMode'):
+            new_pt = not self.node.passThroughMode()
+            self.node.setPassThroughMode(new_pt)
             self.docker.refresh_canvas()
             self.refresh_state()
 
