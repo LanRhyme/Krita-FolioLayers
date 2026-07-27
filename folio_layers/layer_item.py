@@ -3,7 +3,8 @@
 
 from .qt_compat import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QLineEdit,
-    Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent
+    Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent,
+    QGraphicsOpacityEffect
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap
 from .hover_preview import get_layer_type_info, COLOR_LABEL_MAP
@@ -155,6 +156,14 @@ class LayerRowWidget(QWidget):
 
         self._init_native_styles()
         self.refresh_state()
+
+        # 不透明度效果（用于隐藏图层时整体淡化）
+        self._opacity_effects = {}
+        for label in (self.color_bar, self.thumb_label, self.name_label,
+                      self.blend_label, self.opacity_label, self.size_label):
+            eff = QGraphicsOpacityEffect(self)
+            label.setGraphicsEffect(eff)
+            self._opacity_effects[label] = eff
 
     def _init_native_styles(self):
         """尽量移除硬编码的 QSS 背景与圆角，使用纯净透明或原生组件样式"""
@@ -336,7 +345,9 @@ class LayerRowWidget(QWidget):
             self.thumb_label.clear()
 
         # 隐藏图层时整体降低不透明度
-        self.setDisabled(not vis)
+        target = 0.4 if not vis else 1.0
+        for eff in self._opacity_effects.values():
+            eff.setOpacity(target)
 
     # ====== 事件交互 ======
     def _toggle_visibility(self):
