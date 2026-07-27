@@ -2,7 +2,7 @@
 """Native Krita Style Opacity Slider – matches the official layer docker appearance exactly"""
 
 from .qt_compat import (
-    QWidget, QSlider, QHBoxLayout, QLabel, pyqtSignal, Qt, QSizePolicy
+    QWidget, QSlider, QHBoxLayout, QLabel, pyqtSignal, Qt, QSizePolicy, QTimer
 )
 from .theme import get_theme
 
@@ -15,6 +15,11 @@ class OpacityBarWidget(QWidget):
         super().__init__(parent)
         self._value = 100
         self._pending = 0
+
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(100)
+        self._timer.timeout.connect(self._apply_pending)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -85,15 +90,35 @@ class OpacityBarWidget(QWidget):
             self._val_label.setText(f"{clamped}%")
 
     def apply(self):
-        """将待写入的值应用到 Krita 节点，并通知外部"""
         if self._pending:
             self._value = self._pending
             self._pending = 0
             self.valueChanged.emit(self._value)
 
+    def _apply_pending(self):
+        self.apply()
+
     def _on_slider_changed(self, val: int):
         self._pending = val
         self._val_label.setText(f"{val}%")
+        self._timer.start()
 
     def _on_slider_released(self):
+        self._timer.stop()
         self.apply()
+
+    def mousePressEvent(self, event):
+        """Click on slider groove to jump to position immediately"""
+        if event.button() != Qt.MouseButton.LeftButton:
+            super().mousePressEvent(event)
+            return
+        slider_rect = self._slider.rect()
+        slider_pos = self._slider.mapFromParent(event.pos())
+        if slider_rect.contains(slider_pos) and slider_pos.x() >= 0:
+            pct = int(slider_pos.x() / slider_rect.width() * 100)
+            pct = max(0, min(100, pct))
+            self._slider.setValue(pct)
+            self._pending = pct
+            self._val_label.setText(f"{pct}%")
+            self.apply()
+        super().mousePressEvent(event)
