@@ -4,7 +4,7 @@
 from .qt_compat import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QLineEdit,
     Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent,
-    QGraphicsOpacityEffect
+    QPainter
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap
 from .hover_preview import get_layer_type_info, COLOR_LABEL_MAP
@@ -155,15 +155,8 @@ class LayerRowWidget(QWidget):
         layout.addWidget(self.pt_btn)
 
         self._init_native_styles()
-        self.refresh_state()
 
-        # 不透明度效果（用于隐藏图层时整体淡化）
-        self._opacity_effects = {}
-        for label in (self.color_bar, self.thumb_label, self.name_label,
-                      self.blend_label, self.opacity_label, self.size_label):
-            eff = QGraphicsOpacityEffect(self)
-            label.setGraphicsEffect(eff)
-            self._opacity_effects[label] = eff
+        self.refresh_state()
 
     def _init_native_styles(self):
         """尽量移除硬编码的 QSS 背景与圆角，使用纯净透明或原生组件样式"""
@@ -190,12 +183,12 @@ class LayerRowWidget(QWidget):
 
         # 字体大小自适应调整 (默认稍小一些)
         cfg = get_config()
-        font_sz = max(9, min(12, (cfg.thumb_size // 2) - 1))
+        self._font_sz = max(9, min(12, (cfg.thumb_size // 2) - 1))
         if cfg.thumb_size < 24:
-            font_sz = 10
-        self.name_label.setStyleSheet(f"background: transparent; font-size: {font_sz}px;")
+            self._font_sz = 10
+        self.name_label.setStyleSheet(f"color: {t.TEXT_MAIN}; background: transparent; font-size: {self._font_sz}px;")
         
-        sub_font_style = f"color: {t.TEXT_MUTED}; font-size: {max(9, font_sz - 1)}px; background: transparent;"
+        sub_font_style = f"color: {t.TEXT_MUTED}; font-size: {max(9, self._font_sz - 1)}px; background: transparent;"
         self.blend_label.setStyleSheet(sub_font_style)
         self.opacity_label.setStyleSheet(sub_font_style)
         self.size_label.setStyleSheet(sub_font_style)
@@ -246,9 +239,7 @@ class LayerRowWidget(QWidget):
 
         self.type_icon.setVisible(show_type_icon)
         if show_type_icon:
-            icon_color = t.TEXT_MAIN
-            if is_group:
-                icon_color = t.ACCENT
+            icon_color = t.TEXT_MUTED if not vis else (t.ACCENT if is_group else t.TEXT_MAIN)
             self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], icon_color, 14))
 
         self.expand_btn.setVisible(is_group)
@@ -260,6 +251,15 @@ class LayerRowWidget(QWidget):
         try:
             c_idx = self.node.colorLabel()
             c_hex = COLOR_LABEL_MAP.get(c_idx, (None, "transparent"))[1]
+            if c_hex != "transparent" and not vis:
+                c = QColor(c_hex)
+                bg = QColor(t.BG_DARK)
+                dimmed = QColor(
+                    (c.red() + bg.red() * 2) // 3,
+                    (c.green() + bg.green() * 2) // 3,
+                    (c.blue() + bg.blue() * 2) // 3
+                )
+                c_hex = dimmed.name()
             self.color_bar.setStyleSheet(f"background-color: {c_hex}; border-radius: 1px;")
         except Exception:
             self.color_bar.setStyleSheet("background-color: transparent;")
@@ -344,10 +344,30 @@ class LayerRowWidget(QWidget):
         except Exception:
             self.thumb_label.clear()
 
-        # 隐藏图层时整体降低不透明度
-        target = 0.4 if not vis else 1.0
-        for eff in self._opacity_effects.values():
-            eff.setOpacity(target)
+        # 隐藏图层时整体降低不透明度（文本调色 + 缩略图叠加半透明遮罩）
+        if not vis:
+            pix = self.thumb_label.pixmap()
+            if pix and not pix.isNull():
+                dimmed = QPixmap(pix.size())
+                dimmed.fill(Qt.GlobalColor.transparent)
+                dp = QPainter(dimmed)
+                dp.setOpacity(0.35)
+                dp.drawPixmap(0, 0, pix)
+                dp.end()
+                self.thumb_label.setPixmap(dimmed)
+            self.name_label.setStyleSheet(
+                f"color: {t.TEXT_MUTED}; background: transparent; font-size: {self._font_sz}px;")
+            dimmed_sub = f"color: {t.TEXT_MUTED}; font-size: {max(9, self._font_sz - 1)}px; background: transparent;"
+            self.blend_label.setStyleSheet(dimmed_sub)
+            self.opacity_label.setStyleSheet(dimmed_sub)
+            self.size_label.setStyleSheet(dimmed_sub)
+        else:
+            self.name_label.setStyleSheet(
+                f"color: {t.TEXT_MAIN}; background: transparent; font-size: {self._font_sz}px;")
+            restored_sub = f"color: {t.TEXT_MUTED}; font-size: {max(9, self._font_sz - 1)}px; background: transparent;"
+            self.blend_label.setStyleSheet(restored_sub)
+            self.opacity_label.setStyleSheet(restored_sub)
+            self.size_label.setStyleSheet(restored_sub)
 
     # ====== 事件交互 ======
     def _toggle_visibility(self):
