@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Lucide Layer Docker - Native Qt Integration, Clean Dropdowns & Full Blending Modes"""
+"""Folio Layer Docker - Native Qt Integration, Clean Dropdowns & Full Blending Modes"""
 
 import sys
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
-    Qt, QSize, QCursor, QApplication, QHeaderView, QAbstractItemView
+    Qt, QSize, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
@@ -206,11 +206,15 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         """仅重写悬停与选中状态，以及修复系统 Tooltip 颜色使其在暗色主题下可见"""
         t = get_theme()
 
-        # 系统 QToolTip 颜色修复（防止暗色主题下黑字贴近深背景导致不可见）
+        # 系统 QToolTip 颜色修复（双重保障：QPalette + QSS）
+        pal = QApplication.instance().palette()
+        pal.setColor(QPalette.ColorRole.ToolTipBase, QColor(t.BG_BASE))
+        pal.setColor(QPalette.ColorRole.ToolTipText, QColor("#f0f0f0"))
+        QApplication.instance().setPalette(pal)
         QApplication.instance().setStyleSheet(f"""
             QToolTip {{
                 background-color: {t.BG_BASE};
-                color: {t.TEXT_MAIN};
+                color: #f0f0f0;
                 border: 1px solid {t.BORDER};
                 padding: 3px 6px;
                 font-size: 11px;

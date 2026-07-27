@@ -226,6 +226,9 @@ class LayerRowWidget(QWidget):
         type_info = get_layer_type_info(ntype)
         is_group = (ntype == "grouplayer")
 
+        # 获取可见性
+        vis = self.node.visible()
+
         # 界面元素显隐
         show_type_icon = (level in (DETAIL_BALANCED, DETAIL_DETAILED))
         show_alpha_btns = (level in (DETAIL_BALANCED, DETAIL_DETAILED))
@@ -234,7 +237,10 @@ class LayerRowWidget(QWidget):
 
         self.type_icon.setVisible(show_type_icon)
         if show_type_icon:
-            self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], type_info[1], 14))
+            icon_color = t.TEXT_MAIN
+            if is_group:
+                icon_color = t.ACCENT
+            self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], icon_color, 14))
 
         self.expand_btn.setVisible(is_group)
         if is_group:
@@ -264,10 +270,9 @@ class LayerRowWidget(QWidget):
                 b_mode = self.node.blendingMode()
         except Exception:
             pass
-            
+
         b_name = get_blending_mode_name(b_mode)
 
-        # 官方逻辑: 平衡模式下仅在修改(非正常或<100%)时显示；完整模式下始终显示
         is_modified = (op_pct < 100 or b_mode != "normal")
         should_show_info = (level == DETAIL_DETAILED) or (level == DETAIL_BALANCED and is_modified)
 
@@ -280,7 +285,6 @@ class LayerRowWidget(QWidget):
         else:
             self.sub_info_widget.hide()
 
-        # 完整模式分辨率尺寸
         if show_meta_size and self.has_ample_space:
             try:
                 b = self.node.bounds()
@@ -292,7 +296,6 @@ class LayerRowWidget(QWidget):
             self.size_label.hide()
 
         # 可见性与锁定
-        vis = self.node.visible()
         self.vis_btn.setVisible(show_lock_vis)
         self.vis_btn.setIcon(get_lucide_icon("eye" if vis else "eye-off", t.TEXT_MAIN if vis else t.TEXT_MUTED, 14))
 
@@ -331,6 +334,15 @@ class LayerRowWidget(QWidget):
             self.thumb_label.setPixmap(pix)
         except Exception:
             self.thumb_label.clear()
+
+        # 隐藏图层时整体降低不透明度
+        self.setDisabled(not vis)
+        self.color_bar.setOpacity(1.0 if vis else 0.4)
+        self.thumb_label.setOpacity(1.0 if vis else 0.4)
+        self.name_label.setOpacity(1.0 if vis else 0.4)
+        self.blend_label.setOpacity(1.0 if vis else 0.4)
+        self.opacity_label.setOpacity(1.0 if vis else 0.4)
+        self.size_label.setOpacity(1.0 if vis else 0.4)
 
     # ====== 事件交互 ======
     def _toggle_visibility(self):

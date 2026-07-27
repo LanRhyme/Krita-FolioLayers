@@ -11,8 +11,8 @@ from .theme import get_theme
 def get_layer_type_info(ntype):
     t = get_theme()
     mapping = {
-        "paintlayer": ("绘画图层", t.ACCENT, "image"),
-        "grouplayer": ("图层组", t.TEXT_MAIN, "folder"),
+        "paintlayer": ("绘画图层", t.TEXT_MAIN, "image"),
+        "grouplayer": ("图层组", t.ACCENT, "folder"),
         "vectorlayer": ("矢量图层", t.TEXT_MUTED, "type"),
         "filterlayer": ("滤镜图层", t.ACCENT, "wand-2"),
         "adjustmentlayer": ("调整图层", t.ACCENT, "sliders"),
