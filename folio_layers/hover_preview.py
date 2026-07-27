@@ -7,6 +7,7 @@ from .qt_compat import (
 )
 from .lucide_icons import get_lucide_pixmap
 from .theme import get_theme
+from .blending_modes import get_blending_mode_name
 
 def get_layer_type_info(ntype):
     t = get_theme()
@@ -208,7 +209,7 @@ class HoverPreviewPopup(QFrame):
         # 不透明度与混合模式
         op = int(node.opacity() / 255.0 * 100)
         self.opacity_label.setText(f"不透明度: {op}%")
-        self.blend_label.setText(f"混合: {node.blendingMode()}")
+        self.blend_label.setText(f"混合: {get_blending_mode_name(node.blendingMode())}")
 
         # 状态徽章图标
         vis = node.visible()
