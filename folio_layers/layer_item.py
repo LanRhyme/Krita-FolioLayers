@@ -337,12 +337,6 @@ class LayerRowWidget(QWidget):
 
         # 隐藏图层时整体降低不透明度
         self.setDisabled(not vis)
-        self.color_bar.setOpacity(1.0 if vis else 0.4)
-        self.thumb_label.setOpacity(1.0 if vis else 0.4)
-        self.name_label.setOpacity(1.0 if vis else 0.4)
-        self.blend_label.setOpacity(1.0 if vis else 0.4)
-        self.opacity_label.setOpacity(1.0 if vis else 0.4)
-        self.size_label.setOpacity(1.0 if vis else 0.4)
 
     # ====== 事件交互 ======
     def _toggle_visibility(self):
