@@ -440,8 +440,8 @@ class LayerRowWidget(QWidget):
             if self.node:
                 self.docker.show_hover_preview(self.node, QCursor.pos())
         else:
-            # 首次停留，延迟 300ms 后才弹出
-            self.hover_timer.setInterval(300)
+            # 首次停留，延迟 3000ms 后才弹出
+            self.hover_timer.setInterval(3000)
             self.hover_timer.start()
 
     def leaveEvent(self, event):

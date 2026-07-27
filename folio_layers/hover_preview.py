@@ -38,7 +38,7 @@ class HoverPreviewPopup(QFrame):
     """动态主题浮动预览弹窗，鼠标悬停图层项时弹出大图和详细参数"""
 
     def __init__(self, parent=None):
-        super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
@@ -131,18 +131,21 @@ class HoverPreviewPopup(QFrame):
 
     def refresh_theme_styles(self):
         t = get_theme()
-        self.setStyleSheet(f"""
+        self.card.setStyleSheet(f"""
             QFrame#MainCard {{
                 background-color: {t.BG_BASE};
                 border: 1px solid {t.BORDER};
                 border-radius: {t.RADIUS};
             }}
-            QLabel {{
-                color: {t.TEXT_MAIN};
-                font-family: 'Segoe UI', 'Inter', sans-serif;
-            }}
         """)
-        self.name_label.setStyleSheet(f"color: {t.TEXT_MAIN};")
+        name_fg = f"color: {t.TEXT_MAIN}; font-family: 'Segoe UI', 'Inter', sans-serif;"
+        self.name_label.setStyleSheet(name_fg)
+        self.type_icon_label.setStyleSheet(name_fg)
+        self.image_label.setStyleSheet(name_fg)
+        self.vis_badge.setStyleSheet(name_fg)
+        self.lock_badge.setStyleSheet(name_fg)
+        self.alpha_lock_badge.setStyleSheet(name_fg)
+        self.inherit_alpha_badge.setStyleSheet(name_fg)
         self.preview_box.setStyleSheet(f"""
             QFrame {{
                 background-color: {t.BG_DARK};

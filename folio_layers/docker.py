@@ -196,11 +196,11 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         for i in range(self.tree.topLevelItemCount()):
             _update(self.tree.topLevelItem(i))
 
-    def canvasChanged(self, canvas):
-        """Krita 画布切换回调（DockWidget 抽象方法重写）"""
+def canvasChanged(self, canvas):
+        """Krita 内置接口，画布切换时自动调用"""
         self.canvas = canvas
-        if canvas:
-            self.refresh_tree()
+        self.apply_theme_qss()
+        self.refresh_tree()
 
     def apply_theme_qss(self):
         """仅重写悬停与选中状态，以及修复系统 Tooltip 颜色使其在暗色主题下可见"""
