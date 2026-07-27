@@ -4,6 +4,7 @@
 from .qt_compat import (
     QWidget, QSlider, QHBoxLayout, QLabel, pyqtSignal, Qt, QSizePolicy
 )
+from .theme import get_theme
 
 class OpacityBarWidget(QWidget):
     """Krita 官方风格不透明度滑块组合控件"""
@@ -29,7 +30,7 @@ class OpacityBarWidget(QWidget):
         self._slider.setTickPosition(QSlider.TickPosition.NoTicks)
         self._slider.setSingleStep(1)
         self._slider.setPageStep(1)
-        self._slider.setTracking(True)  # 允许点击滑块轨道快速跳转
+        self._slider.setTracking(True)
         self._slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._slider.valueChanged.connect(self._on_slider_changed)
         self._slider.sliderReleased.connect(self._on_slider_released)
@@ -40,6 +41,35 @@ class OpacityBarWidget(QWidget):
         self._val_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self._val_label.setStyleSheet("font-size: 10px;")
         layout.addWidget(self._val_label)
+
+        self._update_style()
+
+    def _update_style(self):
+        t = get_theme()
+        self._slider.setStyleSheet(f"""
+            QSlider::groove:horizontal {{
+                height: 6px;
+                background: {t.BG_ALT};
+                border: 1px solid {t.BORDER};
+                border-radius: 3px;
+            }}
+            QSlider::sub-page:horizontal {{
+                height: 6px;
+                background: {t.ACCENT};
+                border-radius: 3px;
+            }}
+            QSlider::handle:horizontal {{
+                width: 10px;
+                height: 10px;
+                margin: -3px 0;
+                background: {t.TEXT_MAIN};
+                border: 1px solid {t.BORDER};
+                border-radius: 5px;
+            }}
+            QSlider::add-page:horizontal {{
+                height: 6px;
+            }}
+        """)
 
     def value(self) -> int:
         return self._value
