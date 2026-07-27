@@ -80,37 +80,45 @@ class LayerTreeWidget(QTreeWidget):
             event.ignore()
             return
 
-        def reorder(drag_node, new_parent, above_sibling):
-            """将 drag_node 从原来位置移除并插入到 new_parent 下 above_sibling 节点上方"""
-            drag_node.remove()
-            new_parent.addChildNode(drag_node, above_sibling)
-
         if drop_ind == QAbstractItemView.DropIndicatorPosition.OnItem:
             # 拖入图层组内部 (放到组内第一个位置)
             if target_node.type() == "grouplayer":
+                if drag_node.uniqueId() == target_node.uniqueId():
+                    event.ignore()
+                    return
+                old_parent = drag_node.parentNode()
+                if old_parent and old_parent.uniqueId() == target_node.uniqueId():
+                    event.ignore()
+                    return
                 children = target_node.childNodes()
                 first_child = children[-1] if children else None
-                reorder(drag_node, target_node, first_child)
+                drag_node.remove()
+                target_node.addChildNode(drag_node, first_child)
             else:
                 event.ignore()
                 return
         elif drop_ind == QAbstractItemView.DropIndicatorPosition.AboveItem:
             # 放在 target 上方 (在父节点内 target 之后, 因 Krita 列表是倒序)
             parent = target_node.parentNode()
-            if not parent:
+            if not parent or parent.uniqueId() == drag_node.uniqueId():
                 event.ignore()
                 return
-            reorder(drag_node, parent, target_node)
+            drag_node.remove()
+            parent.addChildNode(drag_node, target_node)
         elif drop_ind == QAbstractItemView.DropIndicatorPosition.BelowItem:
             # 放在 target 下方 (在父节点内 target 之前)
             parent = target_node.parentNode()
-            if not parent:
+            if not parent or parent.uniqueId() == drag_node.uniqueId():
                 event.ignore()
                 return
-            siblings = parent.childNodes()  # childNodes() 返回从下到上顺序
+            siblings = parent.childNodes()
             idx = next((i for i, n in enumerate(siblings) if n.uniqueId() == target_node.uniqueId()), -1)
+            if idx < 0:
+                event.ignore()
+                return
             above = siblings[idx - 1] if idx > 0 else None
-            reorder(drag_node, parent, above)
+            drag_node.remove()
+            parent.addChildNode(drag_node, above)
 
         doc.refreshProjection()
         event.setDropAction(Qt.DropAction.IgnoreAction)
@@ -665,34 +673,12 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
     def _move_layer(self, direction):
         if not IN_KRITA:
             return
-        doc = Krita.instance().activeDocument()
-        if not doc or not doc.activeNode():
-            return
-        node = doc.activeNode()
-        parent = node.parentNode()
-        if not parent:
-            return
-
-        siblings = list(parent.childNodes())
-        idx = siblings.index(node) if node in siblings else -1
-        if idx < 0:
-            return
-
-        if direction == "up" and idx >= len(siblings) - 1:
-            return
-        if direction == "down" and idx <= 0:
-            return
-
-        target = None
-        if direction == "up":
-            target = siblings[idx + 1]
-        elif direction == "down":
-            if idx >= 2:
-                target = siblings[idx - 2]
-
-        node.remove()
-        parent.addChildNode(node, target)
-        self.refresh_canvas()
+        action_name = "move_layer_up" if direction == "up" else "move_layer_down"
+        try:
+            Krita.instance().action(action_name).trigger()
+        except Exception:
+            pass
+        self.refresh_canvas(delay=100)
         self.refresh_tree()
 
     def _merge_down(self):
