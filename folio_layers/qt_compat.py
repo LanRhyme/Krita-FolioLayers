@@ -13,7 +13,7 @@ try:
     from PyQt6.QtWidgets import (
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QToolButton,
         QScrollArea, QSizePolicy, QApplication, QFrame, QInputDialog, QMenu,
-        QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect,
+        QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
         QHeaderView, QLineEdit, QAbstractItemView, QDialog, QCheckBox
     )
     from PyQt6.QtSvg import QSvgRenderer
@@ -58,7 +58,7 @@ except ImportError:
     from PyQt5.QtWidgets import (
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QToolButton,
         QScrollArea, QSizePolicy, QApplication, QFrame, QInputDialog, QMenu,
-        QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect,
+        QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
         QHeaderView, QLineEdit, QAction, QAbstractItemView, QDialog, QCheckBox
     )
     from PyQt5.QtSvg import QSvgRenderer
