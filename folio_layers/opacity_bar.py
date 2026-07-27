@@ -6,33 +6,34 @@ from .qt_compat import (
 )
 
 class OpacityBarWidget(QWidget):
-    """与 Krita 官方图层面板完全相同的不透明度滑块组合控件"""
+    """Krita 官方风格不透明度滑块组合控件"""
 
     valueChanged = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._value = 100
+        self._pending = 0
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(3)
 
-        # 标签
         self._label = QLabel("不透明度:")
         self._label.setStyleSheet("font-size: 10px;")
         layout.addWidget(self._label)
 
-        # 原生 Qt 水平滑块 (0-100)
         self._slider = QSlider(Qt.Orientation.Horizontal)
         self._slider.setRange(0, 100)
         self._slider.setValue(100)
         self._slider.setTickPosition(QSlider.TickPosition.NoTicks)
+        self._slider.setSingleStep(1)
+        self._slider.setPageStep(1)
         self._slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._slider.valueChanged.connect(self._on_slider_changed)
+        self._slider.sliderReleased.connect(self._on_slider_released)
         layout.addWidget(self._slider, 1)
 
-        # 数字显示
         self._val_label = QLabel("100%")
         self._val_label.setFixedWidth(32)
         self._val_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -46,12 +47,22 @@ class OpacityBarWidget(QWidget):
         clamped = max(0, min(100, int(val)))
         if self._value != clamped:
             self._value = clamped
+            self._pending = 0
             self._slider.blockSignals(True)
             self._slider.setValue(clamped)
             self._slider.blockSignals(False)
             self._val_label.setText(f"{clamped}%")
 
+    def apply(self):
+        """将待写入的值应用到 Krita 节点，并通知外部"""
+        if self._pending:
+            self._value = self._pending
+            self._pending = 0
+            self.valueChanged.emit(self._value)
+
     def _on_slider_changed(self, val: int):
-        self._value = val
+        self._pending = val
         self._val_label.setText(f"{val}%")
-        self.valueChanged.emit(val)
+
+    def _on_slider_released(self):
+        self.apply()
