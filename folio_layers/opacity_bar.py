@@ -29,6 +29,7 @@ class OpacityBarWidget(QWidget):
         self._slider.setTickPosition(QSlider.TickPosition.NoTicks)
         self._slider.setSingleStep(1)
         self._slider.setPageStep(1)
+        self._slider.setTracking(True)  # 允许点击滑块轨道快速跳转
         self._slider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._slider.valueChanged.connect(self._on_slider_changed)
         self._slider.sliderReleased.connect(self._on_slider_released)
