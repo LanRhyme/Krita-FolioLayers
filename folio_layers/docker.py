@@ -196,7 +196,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         for i in range(self.tree.topLevelItemCount()):
             _update(self.tree.topLevelItem(i))
 
-def canvasChanged(self, canvas):
+    def canvasChanged(self, canvas):
         """Krita 内置接口，画布切换时自动调用"""
         self.canvas = canvas
         self.apply_theme_qss()
