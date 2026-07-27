@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Folio Layer Docker - Native Qt Integration, Clean Dropdowns & Full Blending Modes"""
+"""Lucide Layer Docker - Native Qt Integration, Clean Dropdowns & Full Blending Modes"""
 
 import sys
 from .qt_compat import (
@@ -117,12 +117,12 @@ class LayerTreeWidget(QTreeWidget):
         event.accept()
         QTimer.singleShot(50, self.docker.refresh_tree)
 
-class FolioLayerDocker(DockWidget if IN_KRITA else QWidget):
+class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
     """精简优雅、包含全套原生功能与全类混合模式菜单的 Krita 图层面板"""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Folio Layers")
+        self.setWindowTitle("Lucide 图层")
         self.canvas = None
 
         self.hover_preview = HoverPreviewPopup(self)
@@ -669,22 +669,25 @@ class FolioLayerDocker(DockWidget if IN_KRITA else QWidget):
         if not parent:
             return
 
-        siblings = parent.childNodes()
+        # childNodes() 返回从下到上的顺序，视觉顶部 = 列表最后一个元素
+        # 在 UI 中上移 = 在视觉堆栈中上移 = 列表 idx+1
+        # 在 UI 中下移 = 在视觉堆栈中下移 = 列表 idx-1
+        siblings = list(parent.childNodes())
         idx = siblings.index(node) if node in siblings else -1
         if idx < 0:
             return
 
+        target = None
         if direction == "up" and idx < len(siblings) - 1:
-            target_above = siblings[idx + 1]
-            parent.removeChildNode(node)
-            parent.addChildNode(node, target_above)
+            target = siblings[idx + 1]
         elif direction == "down" and idx > 0:
-            target_below = siblings[idx - 1]
-            parent.removeChildNode(node)
-            parent.addChildNode(node, target_below)
+            target = siblings[idx - 1]
 
-        self.refresh_canvas()
-        self.refresh_tree()
+        if target:
+            parent.removeChildNode(node)
+            parent.addChildNode(node, target)
+            self.refresh_canvas()
+            self.refresh_tree()
 
     def _merge_down(self):
         """合并到下层"""

@@ -24,14 +24,14 @@ def get_layer_type_info(ntype):
 
 COLOR_LABEL_MAP = {
     0: ("无标签", "transparent"),
-    1: ("蓝色",  "#7f9bb0"),   # Krita index 1 = blue
-    2: ("绿色",  "#8fa382"),   # Krita index 2 = green
-    3: ("黄色",  "#bda572"),   # Krita index 3 = yellow/ochre
-    4: ("橙色",  "#c79685"),   # Krita index 4 = orange
-    5: ("红色",  "#be7a6b"),   # Krita index 5 = red
-    6: ("青色",  "#6a9e9a"),   # Krita index 6 = teal/cyan
-    7: ("紫色",  "#8c7fa5"),   # Krita index 7 = purple (user confirmed)
-    8: ("灰色",  "#8c8c8c"),   # Krita index 8 = gray, 0 saturation (user confirmed)
+    1: ("蓝色",  "#7f9bb0"),
+    2: ("绿色",  "#8fa382"),
+    3: ("黄色",  "#bda572"),
+    4: ("橙色",  "#c79685"),
+    5: ("褐色",  "#b08a70"),
+    6: ("红色",  "#be7a6b"),
+    7: ("紫色",  "#8c7fa5"),
+    8: ("灰色",  "#8c8c8c"),
 }
 
 class HoverPreviewPopup(QFrame):
