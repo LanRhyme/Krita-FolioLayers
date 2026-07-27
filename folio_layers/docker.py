@@ -675,7 +675,8 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
         # childNodes() 返回从下到上的顺序，视觉顶部 = 列表最后一个元素
         # 在 UI 中上移 = 在视觉堆栈中上移 = 列表 idx+1
-        # 在 UI 中下移 = 在视觉堆栈中下移 = 列表 idx-1
+        # 在 UI 中下移 = 在视觉堆栈中下移: addChildNode 把节点放在 above 之上,
+        # 所以需要放在 idx-2 之上（即下方节点的下方），idx=1 时放到底部
         siblings = list(parent.childNodes())
         idx = siblings.index(node) if node in siblings else -1
         if idx < 0:
@@ -684,14 +685,15 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         target = None
         if direction == "up" and idx < len(siblings) - 1:
             target = siblings[idx + 1]
-        elif direction == "down" and idx > 0:
-            target = siblings[idx - 1]
+        elif direction == "down":
+            if idx >= 2:
+                target = siblings[idx - 2]
+            # idx == 1: target 保持 None，放到底部
 
-        if target:
-            parent.removeChildNode(node)
-            parent.addChildNode(node, target)
-            self.refresh_canvas()
-            self.refresh_tree()
+        parent.removeChildNode(node)
+        parent.addChildNode(node, target)
+        self.refresh_canvas()
+        self.refresh_tree()
 
     def _merge_down(self):
         """合并到下层"""
