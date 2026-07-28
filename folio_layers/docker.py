@@ -207,10 +207,11 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         main_layout.addWidget(self.tree, 1)
 
         # 加载批处理状态：当 Krita 加载/创建大图像时暂停所有同步，避免阻塞主线程
-        self._loading = False
+        self._loading = True
         self._loading_timer = QTimer(self)
         self._loading_timer.setSingleShot(True)
         self._loading_timer.timeout.connect(self._finish_loading)
+        self._loading_timer.start(500)  # 启动时短暂延迟，等 Krita 完成初始化
 
         # 组展开状态：None=首次加载（默认展开），set()=已跟踪
         self._expanded_uids = None
@@ -225,7 +226,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             try:
                 notifier = Krita.instance().notifier()
                 notifier.imageCreated.connect(self._on_image_created)
-                notifier.activeViewChanged.connect(self.request_tree_refresh)
+                notifier.activeViewChanged.connect(self._on_view_changed)
             except Exception:
                 pass
 
@@ -250,20 +251,25 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self._loading = True
         self._loading_timer.start(2000)
 
+    def _on_view_changed(self, *args):
+        """视图切换（含文件加载期间的早期信号）：防抖后重建树"""
+        self._loading = True
+        self._loading_timer.start(1000)
+
     def _finish_loading(self):
-        """加载完成（防抖 2s 无新信号）后退出加载模式并重建树"""
+        """加载完成（防抖无新信号）后退出加载模式并重建树"""
         self._loading = False
         self._updating_ui = False
+        self.apply_theme_qss()
         self.refresh_tree()
 
     def canvasChanged(self, canvas):
         """Krita 内置接口，画布切换时自动调用"""
         self.canvas = canvas
-        self.apply_theme_qss()
         # 进入加载模式并防抖：文件加载时 canvasChanged 会连续触发多次，
-        # 避免每次都重建整个图层树
+        # 避免每次都重建整个图层树；apply_theme_qss 也延后到防抖结束
         self._loading = True
-        self._loading_timer.start(2000)
+        self._loading_timer.start(1500)
 
     def apply_theme_qss(self):
         """仅重写悬停与选中状态，以及修复系统 Tooltip 颜色使其在暗色主题下可见"""
