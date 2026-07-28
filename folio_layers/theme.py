@@ -135,10 +135,21 @@ _BGRA_BYTE_ORDER = "ARGB"  # QImage.Format_ARGB32 内存布局：B,G,R,A
 
 def create_projection_thumbnail(node, thumb_size, use_checkerboard=True):
     """
-    用 projectionPixelData 生成投影缩略图（含蒙版/效果/子图层），
-    替代 node.thumbnail() 只读原始像素的问题。
+    生成投影缩略图（含蒙版/效果/子图层）。
+    优先使用 C++ 动态库（projection()->createThumbnail），
+    失败时回退到 Python projectionPixelData 方案。
     返回与 draw_thumbnail_with_checkerboard 兼容的 QPixmap。
     """
+    # 优先尝试原生 C++ 库
+    try:
+        from .projthumb import native_projection_thumbnail
+        qimg = native_projection_thumbnail(node, thumb_size, thumb_size)
+        if qimg is not None and not qimg.isNull():
+            return draw_thumbnail_with_checkerboard(qimg, thumb_size, thumb_size, use_checkerboard)
+    except Exception:
+        pass
+
+    # 回退：Python projectionPixelData 方案
     try:
         bounds = node.bounds()
     except Exception:
@@ -147,7 +158,6 @@ def create_projection_thumbnail(node, thumb_size, use_checkerboard=True):
         return draw_thumbnail_with_checkerboard(None, thumb_size, thumb_size, use_checkerboard)
 
     bw, bh = bounds.width(), bounds.height()
-    # 限制读取区域，避免巨大图层一次性读取过多像素
     max_sample = 256
     scale = min(1.0, max_sample / max(bw, bh))
     sw, sh = max(1, int(bw * scale)), max(1, int(bh * scale))
@@ -158,7 +168,6 @@ def create_projection_thumbnail(node, thumb_size, use_checkerboard=True):
         raw = b""
 
     if not raw:
-        # 回退到原始 thumbnail API
         try:
             qimg = node.thumbnail(thumb_size, thumb_size)
             return draw_thumbnail_with_checkerboard(qimg, thumb_size, thumb_size, use_checkerboard)
@@ -172,21 +181,18 @@ def create_projection_thumbnail(node, thumb_size, use_checkerboard=True):
 
     img = None
     if bytes_per_pixel == 4:
-        # 8-bit RGBA: Krita 返回 B,G,R,A 字节序 → Format_ARGB32 (小端 = BGRA)
         img = QImage(raw, sw, sh, sw * 4, QImage.Format.Format_ARGB32)
         img = img.copy()
     elif bytes_per_pixel == 3:
-        # 8-bit RGB (无 Alpha): B,G,R → Format_RGB888 需要交换为 R,G,B
         import struct
         rgb_data = bytearray(len(raw))
         for i in range(0, len(raw), 3):
-            rgb_data[i] = raw[i + 2]     # R
-            rgb_data[i + 1] = raw[i + 1] # G
-            rgb_data[i + 2] = raw[i]     # B
+            rgb_data[i] = raw[i + 2]
+            rgb_data[i + 1] = raw[i + 1]
+            rgb_data[i + 2] = raw[i]
         img = QImage(bytes(rgb_data), sw, sh, sw * 3, QImage.Format.Format_RGB888)
         img = img.copy()
     else:
-        # 16-bit 或其他色彩空间：回退到 thumbnail API
         try:
             qimg = node.thumbnail(thumb_size, thumb_size)
             return draw_thumbnail_with_checkerboard(qimg, thumb_size, thumb_size, use_checkerboard)
