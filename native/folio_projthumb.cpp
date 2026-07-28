@@ -32,10 +32,13 @@ int folio_projection_thumbnail(uintptr_t node_ptr, int req_w, int req_h,
     KisNodeSP kn = n->node();
     if (!kn) return 0;
 
-    KisPaintDeviceSP proj = kn->projection();
-    if (!proj) return 0;
+    /* Use original() — only this layer's own content (children for groups,
+       raw pixels for paint layers, with masks applied). Never use projection()
+       as fallback because it may include merged sibling layers below. */
+    KisPaintDeviceSP dev = kn->original();
+    if (!dev) return 0;
 
-    QImage img = proj->createThumbnail(req_w, req_h, Qt::KeepAspectRatio);
+    QImage img = dev->createThumbnail(req_w, req_h, Qt::KeepAspectRatio);
     if (img.isNull()) return 0;
 
     QImage rgba = img.convertToFormat(QImage::Format_RGBA8888);

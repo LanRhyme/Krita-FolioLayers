@@ -3,7 +3,6 @@
 
 import ctypes
 import os
-import sys
 
 from .qt_compat import QImage
 
@@ -53,7 +52,7 @@ def _load_lib():
             ctypes.c_uint64,
             ctypes.c_int,
             ctypes.c_int,
-            ctypes.POINTER(ctypes.POINTER(ctypes.c_ubyte)),
+            ctypes.POINTER(ctypes.c_void_p),
             ctypes.POINTER(ctypes.c_int),
             ctypes.POINTER(ctypes.c_int),
             ctypes.POINTER(ctypes.c_int),
@@ -83,7 +82,7 @@ def native_projection_thumbnail(node, req_w, req_h):
     if not ptr:
         return None
 
-    out = ctypes.pointer(ctypes.c_ubyte())
+    out = ctypes.c_void_p()
     outw = ctypes.c_int()
     outh = ctypes.c_int()
     outstride = ctypes.c_int()
@@ -103,11 +102,14 @@ def native_projection_thumbnail(node, req_w, req_h):
     w = outw.value
     h = outh.value
     stride = outstride.value
-    if w <= 0 or h <= 0:
-        lib.folio_free(out)
+    if w <= 0 or h <= 0 or not out.value:
+        if out.value:
+            lib.folio_free(out)
         return None
 
-    img = QImage(out, w, h, stride, QImage.Format.Format_RGBA8888)
+    buf_size = stride * h
+    raw = ctypes.string_at(out.value, buf_size)
+    img = QImage(raw, w, h, stride, QImage.Format.Format_RGBA8888)
     result = img.copy()
     lib.folio_free(out)
     return result

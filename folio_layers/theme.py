@@ -89,7 +89,7 @@ def create_checkerboard_pixmap(w, h, grid_size=4):
     cache_key = (w, h, grid_size)
     cached = _checkerboard_cache.get(cache_key)
     if cached is not None:
-        return cached
+        return cached.copy()
 
     pix = QPixmap(w, h)
     painter = QPainter(pix)
@@ -102,7 +102,7 @@ def create_checkerboard_pixmap(w, h, grid_size=4):
     painter.end()
 
     _checkerboard_cache[cache_key] = pix
-    return pix
+    return pix.copy()
 
 def clear_theme_cache():
     """Clear all theme-related caches (call when theme/thumb_size changes)"""
@@ -130,8 +130,14 @@ def draw_thumbnail_with_checkerboard(qimg, w, h, use_checkerboard=True):
         painter.end()
     return base_pix
 
-# BGRA 字节序常量
-_BGRA_BYTE_ORDER = "ARGB"  # QImage.Format_ARGB32 内存布局：B,G,R,A
+def _aspect_ratio_dims(src_w, src_h, max_dim):
+    """计算保持宽高比的目标尺寸（用于 node.thumbnail 调用，避免 IgnoreAspectRatio 拉伸）"""
+    if src_w <= 0 or src_h <= 0:
+        return max_dim, max_dim
+    scale = max_dim / max(src_w, src_h)
+    tw = max(1, int(src_w * scale))
+    th = max(1, int(src_h * scale))
+    return tw, th
 
 def create_projection_thumbnail(node, thumb_size, use_checkerboard=True):
     """
@@ -169,7 +175,8 @@ def create_projection_thumbnail(node, thumb_size, use_checkerboard=True):
 
     if not raw:
         try:
-            qimg = node.thumbnail(thumb_size, thumb_size)
+            tw, th = _aspect_ratio_dims(bw, bh, thumb_size)
+            qimg = node.thumbnail(tw, th)
             return draw_thumbnail_with_checkerboard(qimg, thumb_size, thumb_size, use_checkerboard)
         except Exception:
             return draw_thumbnail_with_checkerboard(None, thumb_size, thumb_size, use_checkerboard)
@@ -184,7 +191,6 @@ def create_projection_thumbnail(node, thumb_size, use_checkerboard=True):
         img = QImage(raw, sw, sh, sw * 4, QImage.Format.Format_ARGB32)
         img = img.copy()
     elif bytes_per_pixel == 3:
-        import struct
         rgb_data = bytearray(len(raw))
         for i in range(0, len(raw), 3):
             rgb_data[i] = raw[i + 2]
@@ -194,7 +200,8 @@ def create_projection_thumbnail(node, thumb_size, use_checkerboard=True):
         img = img.copy()
     else:
         try:
-            qimg = node.thumbnail(thumb_size, thumb_size)
+            tw, th = _aspect_ratio_dims(bw, bh, thumb_size)
+            qimg = node.thumbnail(tw, th)
             return draw_thumbnail_with_checkerboard(qimg, thumb_size, thumb_size, use_checkerboard)
         except Exception:
             pass

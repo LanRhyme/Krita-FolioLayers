@@ -261,6 +261,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         """加载完成（防抖无新信号）后退出加载模式并重建树"""
         self._loading = False
         self._updating_ui = False
+        clear_theme_cache()
         self.apply_theme_qss()
         self.refresh_tree()
 
