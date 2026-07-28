@@ -6,7 +6,7 @@ from .qt_compat import (
     QFont, QGraphicsDropShadowEffect, QSize, QRect, QApplication
 )
 from .lucide_icons import get_lucide_pixmap
-from .theme import get_theme
+from .theme import get_theme, create_projection_thumbnail
 from .blending_modes import get_blending_mode_name
 
 def get_layer_type_info(ntype):
@@ -183,11 +183,10 @@ class HoverPreviewPopup(QFrame):
         """)
         self.type_icon_label.setPixmap(get_lucide_pixmap(type_info[2], type_info[1], 16))
 
-        # 获取缩略图
+        # 获取缩略图（投影模式，含蒙版/效果）
         try:
-            qimg = node.thumbnail(220, 170)
-            if not qimg.isNull():
-                pix = QPixmap.fromImage(qimg)
+            pix = create_projection_thumbnail(node, 220, True)
+            if not pix.isNull():
                 scaled_pix = pix.scaled(
                     QSize(220, 170),
                     Qt.AspectRatioMode.KeepAspectRatio,

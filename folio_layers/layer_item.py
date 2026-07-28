@@ -8,7 +8,7 @@ from .qt_compat import (
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap
 from .hover_preview import get_layer_type_info, COLOR_LABEL_MAP
-from .theme import get_theme, draw_thumbnail_with_checkerboard
+from .theme import get_theme, draw_thumbnail_with_checkerboard, create_projection_thumbnail
 from .config import (
     get_config, DETAIL_NONE, DETAIL_COMPACT, DETAIL_BALANCED, DETAIL_DETAILED
 )
@@ -380,8 +380,7 @@ class LayerRowWidget(QWidget):
         try:
             cfg = get_config()
             ts = cfg.thumb_size
-            qimg = self.node.thumbnail(ts, ts)
-            pix = draw_thumbnail_with_checkerboard(qimg, ts, ts, cfg.use_checkerboard)
+            pix = create_projection_thumbnail(self.node, ts, cfg.use_checkerboard)
             # 隐藏图层：叠加半透明遮罩
             if not self.node.visible():
                 dimmed = QPixmap(pix.size())
