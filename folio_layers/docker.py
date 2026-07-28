@@ -80,6 +80,35 @@ class LayerTreeWidget(QTreeWidget):
             event.ignore()
             return
 
+        def _reattach_children(group, saved_children):
+            if group is None or not saved_children:
+                return
+            for child in saved_children:
+                try:
+                    cur_parent = child.parentNode()
+                    if cur_parent is not None and cur_parent.uniqueId() == group.uniqueId():
+                        continue
+                    group.addChildNode(child, None)
+                except Exception:
+                    pass
+
+        def _reorder_with_children(drag_node, new_parent, above_sibling):
+            is_group = drag_node.type() == "grouplayer"
+            saved_children = list(drag_node.childNodes()) if is_group else []
+            old_parent = drag_node.parentNode()
+            if old_parent is None:
+                return
+            try:
+                old_parent.removeChildNode(drag_node)
+            except Exception:
+                return
+            try:
+                new_parent.addChildNode(drag_node, above_sibling)
+            except Exception:
+                return
+            if is_group:
+                _reattach_children(drag_node, saved_children)
+
         if drop_ind == QAbstractItemView.DropIndicatorPosition.OnItem:
             if target_node.type() == "grouplayer":
                 if drag_node.uniqueId() == target_node.uniqueId():
@@ -89,10 +118,9 @@ class LayerTreeWidget(QTreeWidget):
                 if old_parent and old_parent.uniqueId() == target_node.uniqueId():
                     event.ignore()
                     return
-                children = target_node.childNodes()
+                children = list(target_node.childNodes())
                 first_child = children[-1] if children else None
-                old_parent.removeChildNode(drag_node)
-                target_node.addChildNode(drag_node, first_child)
+                _reorder_with_children(drag_node, target_node, first_child)
             else:
                 event.ignore()
                 return
@@ -101,8 +129,7 @@ class LayerTreeWidget(QTreeWidget):
             if not parent or parent.uniqueId() == drag_node.uniqueId():
                 event.ignore()
                 return
-            drag_node.parentNode().removeChildNode(drag_node)
-            parent.addChildNode(drag_node, target_node)
+            _reorder_with_children(drag_node, parent, target_node)
         elif drop_ind == QAbstractItemView.DropIndicatorPosition.BelowItem:
             parent = target_node.parentNode()
             if not parent or parent.uniqueId() == drag_node.uniqueId():
@@ -114,8 +141,7 @@ class LayerTreeWidget(QTreeWidget):
                 event.ignore()
                 return
             above = siblings[idx - 1] if idx > 0 else None
-            drag_node.parentNode().removeChildNode(drag_node)
-            parent.addChildNode(drag_node, above)
+            _reorder_with_children(drag_node, parent, above)
 
         doc.refreshProjection()
         event.setDropAction(Qt.DropAction.IgnoreAction)
