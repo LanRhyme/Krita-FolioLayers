@@ -196,6 +196,12 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
         main_layout.addWidget(self.tree, 1)
 
+        # 加载批处理状态：当 Krita 加载/创建大图像时暂停所有同步，避免阻塞主线程
+        self._loading = False
+        self._loading_timer = QTimer(self)
+        self._loading_timer.setSingleShot(True)
+        self._loading_timer.timeout.connect(self._finish_loading)
+
         # 5. 定时刷新与 Krita 事件挂载
         self.sync_timer = QTimer(self)
         self.sync_timer.setInterval(600)
@@ -205,8 +211,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if IN_KRITA:
             try:
                 notifier = Krita.instance().notifier()
-                # 使用局部状态更新，避免重构树导致闪烁
-                notifier.imageUpdated.connect(self.update_tree_states)
+                notifier.imageCreated.connect(self._on_image_created)
                 notifier.activeViewChanged.connect(self.request_tree_refresh)
             except Exception:
                 pass
@@ -216,7 +221,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
     def update_tree_states(self, *args):
         """轻量级刷新：仅更新现有树节点的状态、缩略图和徽章，不重建整个树"""
-        if self._updating_ui or not IN_KRITA:
+        if self._updating_ui or not IN_KRITA or self._loading:
             return
         def _update(item):
             w = self.tree.itemWidget(item, 0)
@@ -226,6 +231,17 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         
         for i in range(self.tree.topLevelItemCount()):
             _update(self.tree.topLevelItem(i))
+
+    def _on_image_created(self, *args):
+        """Krita 创建/加载新图像时进入批处理模式，暂停同步以避免阻塞主线程"""
+        self._loading = True
+        self._loading_timer.start(1500)
+
+    def _finish_loading(self):
+        """加载完成（防抖 1.5s 无新信号）后退出加载模式并重建树"""
+        self._loading = False
+        self._updating_ui = False
+        self.refresh_tree()
 
     def canvasChanged(self, canvas):
         """Krita 内置接口，画布切换时自动调用"""
@@ -466,10 +482,12 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
     # ====== 树形刷新与同步 ======
     def request_tree_refresh(self, delay=60):
+        if self._loading:
+            return
         QTimer.singleShot(delay, self.refresh_tree)
 
     def refresh_tree(self):
-        if not IN_KRITA or self._updating_ui:
+        if not IN_KRITA or self._updating_ui or self._loading:
             return
 
         self._updating_ui = True
@@ -531,7 +549,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self.opacity_bar.blockSignals(False)
 
     def _sync_with_krita(self):
-        if not IN_KRITA or self._updating_ui:
+        if not IN_KRITA or self._updating_ui or self._loading:
             return
         doc = Krita.instance().activeDocument()
         if not doc:
