@@ -81,7 +81,6 @@ class LayerTreeWidget(QTreeWidget):
             return
 
         if drop_ind == QAbstractItemView.DropIndicatorPosition.OnItem:
-            # 拖入图层组内部 (放到组内第一个位置)
             if target_node.type() == "grouplayer":
                 if drag_node.uniqueId() == target_node.uniqueId():
                     event.ignore()
@@ -92,21 +91,19 @@ class LayerTreeWidget(QTreeWidget):
                     return
                 children = target_node.childNodes()
                 first_child = children[-1] if children else None
-                drag_node.remove()
+                old_parent.removeChildNode(drag_node)
                 target_node.addChildNode(drag_node, first_child)
             else:
                 event.ignore()
                 return
         elif drop_ind == QAbstractItemView.DropIndicatorPosition.AboveItem:
-            # 放在 target 上方 (在父节点内 target 之后, 因 Krita 列表是倒序)
             parent = target_node.parentNode()
             if not parent or parent.uniqueId() == drag_node.uniqueId():
                 event.ignore()
                 return
-            drag_node.remove()
+            drag_node.parentNode().removeChildNode(drag_node)
             parent.addChildNode(drag_node, target_node)
         elif drop_ind == QAbstractItemView.DropIndicatorPosition.BelowItem:
-            # 放在 target 下方 (在父节点内 target 之前)
             parent = target_node.parentNode()
             if not parent or parent.uniqueId() == drag_node.uniqueId():
                 event.ignore()
@@ -117,7 +114,7 @@ class LayerTreeWidget(QTreeWidget):
                 event.ignore()
                 return
             above = siblings[idx - 1] if idx > 0 else None
-            drag_node.remove()
+            drag_node.parentNode().removeChildNode(drag_node)
             parent.addChildNode(drag_node, above)
 
         doc.refreshProjection()
