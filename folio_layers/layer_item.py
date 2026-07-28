@@ -27,6 +27,12 @@ class LayerRowWidget(QWidget):
         self.hover_timer.setInterval(300)
         self.hover_timer.timeout.connect(self._on_hover_timeout)
 
+        # 缩略图懒加载：避免建树时同步阻塞，延迟到事件循环空闲时加载
+        self._thumb_timer = QTimer(self)
+        self._thumb_timer.setSingleShot(True)
+        self._thumb_timer.setInterval(80)
+        self._thumb_timer.timeout.connect(self._load_thumbnail)
+
         cfg = get_config()
 
         # 只要缩略图 >= 20px 且有显示必要，即可提供两行空间
@@ -335,26 +341,11 @@ class LayerRowWidget(QWidget):
         except Exception:
             self.inherit_alpha_btn.hide()
 
-        # 缩略图（带网格棋盘格透明底）
-        try:
-            ts = cfg.thumb_size
-            qimg = self.node.thumbnail(ts, ts)
-            pix = draw_thumbnail_with_checkerboard(qimg, ts, ts, cfg.use_checkerboard)
-            self.thumb_label.setPixmap(pix)
-        except Exception:
-            self.thumb_label.clear()
+        # 缩略图：延迟加载，避免同步阻塞（实际加载在 _load_thumbnail 中）
+        self._thumb_timer.start()
 
         # 隐藏图层时整体降低不透明度（文本调色 + 缩略图叠加半透明遮罩）
         if not vis:
-            pix = self.thumb_label.pixmap()
-            if pix and not pix.isNull():
-                dimmed = QPixmap(pix.size())
-                dimmed.fill(Qt.GlobalColor.transparent)
-                dp = QPainter(dimmed)
-                dp.setOpacity(0.35)
-                dp.drawPixmap(0, 0, pix)
-                dp.end()
-                self.thumb_label.setPixmap(dimmed)
             self.name_label.setStyleSheet(
                 f"color: {t.TEXT_MUTED}; background: transparent; font-size: {self._font_sz}px;")
             dimmed_sub = f"color: {t.TEXT_MUTED}; font-size: {max(9, self._font_sz - 1)}px; background: transparent;"
@@ -368,6 +359,42 @@ class LayerRowWidget(QWidget):
             self.blend_label.setStyleSheet(restored_sub)
             self.opacity_label.setStyleSheet(restored_sub)
             self.size_label.setStyleSheet(restored_sub)
+
+    def _is_tree_visible(self):
+        """检查此项是否在树中可见（所有父组都已展开）"""
+        item = self.tree_item
+        parent = item.parent()
+        while parent:
+            if not parent.isExpanded():
+                return False
+            parent = parent.parent()
+        return True
+
+    def _load_thumbnail(self):
+        """实际加载缩略图（由 _thumb_timer 延迟触发，避免建树/刷新时同步阻塞）"""
+        if not self.node:
+            return
+        # 折叠组内的子项不加载缩略图，等展开时再加载
+        if not self._is_tree_visible():
+            return
+        try:
+            cfg = get_config()
+            ts = cfg.thumb_size
+            qimg = self.node.thumbnail(ts, ts)
+            pix = draw_thumbnail_with_checkerboard(qimg, ts, ts, cfg.use_checkerboard)
+            # 隐藏图层：叠加半透明遮罩
+            if not self.node.visible():
+                dimmed = QPixmap(pix.size())
+                dimmed.fill(Qt.GlobalColor.transparent)
+                dp = QPainter(dimmed)
+                dp.setOpacity(0.35)
+                dp.drawPixmap(0, 0, pix)
+                dp.end()
+                self.thumb_label.setPixmap(dimmed)
+            else:
+                self.thumb_label.setPixmap(pix)
+        except Exception:
+            self.thumb_label.clear()
 
     # ====== 事件交互 ======
     def _toggle_visibility(self):

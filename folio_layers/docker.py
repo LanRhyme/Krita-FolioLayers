@@ -7,10 +7,10 @@ from .qt_compat import (
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
     Qt, QSize, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette
 )
-from .lucide_icons import get_lucide_icon, get_lucide_pixmap
+from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
 from .layer_item import LayerRowWidget
-from .theme import get_theme
+from .theme import get_theme, clear_theme_cache
 from .opacity_bar import OpacityBarWidget
 from .blending_modes import (
     create_categorized_blending_menu, get_blending_mode_name
@@ -203,6 +203,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._show_context_menu)
         self.tree.itemSelectionChanged.connect(self._on_tree_selection_changed)
+        self.tree.itemExpanded.connect(self._on_item_expanded)
 
         main_layout.addWidget(self.tree, 1)
 
@@ -274,6 +275,9 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
     def apply_theme_qss(self):
         """仅重写悬停与选中状态，以及修复系统 Tooltip 颜色使其在暗色主题下可见"""
         t = get_theme()
+
+        # 主题变更时清除图标缓存（颜色变了需要重新渲染）
+        clear_icon_cache()
 
         # 系统 QToolTip 颜色修复（双重保障：QPalette + QSS）
         pal = QApplication.instance().palette()
@@ -513,6 +517,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             return
 
         self._updating_ui = True
+        self.tree.setUpdatesEnabled(False)
 
         # 保存展开状态，避免重建后所有组都展开
         if self._expanded_uids is not None:
@@ -532,6 +537,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         doc = Krita.instance().activeDocument()
         if not doc:
             self._updating_ui = False
+            self.tree.setUpdatesEnabled(True)
             return
 
         active_node = doc.activeNode()
@@ -546,6 +552,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if self._expanded_uids is None:
             self._expanded_uids = set()
 
+        self.tree.setUpdatesEnabled(True)
         self._updating_ui = False
 
     def _populate_node_tree(self, parent_node, parent_tree_item, active_node):
@@ -605,6 +612,16 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self.update_tree_states()
 
     # ====== 属性事件 ======
+    def _on_item_expanded(self, item):
+        """组展开时懒加载子项缩略图（递归处理已展开的子组）"""
+        for i in range(item.childCount()):
+            child_item = item.child(i)
+            w = self.tree.itemWidget(child_item, 0)
+            if w:
+                w._thumb_timer.start()
+            if child_item.childCount() > 0 and child_item.isExpanded():
+                self._on_item_expanded(child_item)
+
     def _on_tree_selection_changed(self):
         if self._updating_ui or not IN_KRITA:
             return
@@ -635,7 +652,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             mode_name = get_blending_mode_name(mode_id)
             self.btn_blend.setText(mode_name)
             self.refresh_canvas()
-            self.refresh_tree()
+            self.update_tree_states()
 
     def _on_opacity_bar_changed(self, percent_val):
         if self._updating_ui or not IN_KRITA:
@@ -824,7 +841,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
         toggle_vis(root)
         self.refresh_canvas()
-        self.refresh_tree()
+        self.update_tree_states()
 
     def _show_color_label_picker(self):
         """在导航栏颜色标记按钮下方弹出横向色块选择器"""
@@ -914,7 +931,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if node.type() == "grouplayer" and hasattr(node, "setPassThroughMode"):
             is_pt = node.passThroughMode()
             act_pt = QAction(get_lucide_icon("layers", t.TEXT_MAIN, 14), f"穿透模式 (Pass Through): {'开启' if is_pt else '关闭'}", menu)
-            act_pt.triggered.connect(lambda: (node.setPassThroughMode(not is_pt), self.refresh_canvas(), self.refresh_tree()))
+            act_pt.triggered.connect(lambda: (node.setPassThroughMode(not is_pt), self.refresh_canvas(), self.update_tree_states()))
             menu.addAction(act_pt)
 
         menu.addSeparator()

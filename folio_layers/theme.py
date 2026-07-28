@@ -82,8 +82,15 @@ _theme_instance = DynamicKritaTheme()
 def get_theme():
     return _theme_instance
 
+_checkerboard_cache = {}
+
 def create_checkerboard_pixmap(w, h, grid_size=4):
-    """Generates a transparent checkerboard pattern pixmap"""
+    """Generates a transparent checkerboard pattern pixmap (cached by size)"""
+    cache_key = (w, h, grid_size)
+    cached = _checkerboard_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     pix = QPixmap(w, h)
     painter = QPainter(pix)
     c1 = QColor(220, 220, 220)
@@ -93,7 +100,13 @@ def create_checkerboard_pixmap(w, h, grid_size=4):
             fill = c1 if ((x // grid_size) + (y // grid_size)) % 2 == 0 else c2
             painter.fillRect(x, y, grid_size, grid_size, fill)
     painter.end()
+
+    _checkerboard_cache[cache_key] = pix
     return pix
+
+def clear_theme_cache():
+    """Clear all theme-related caches (call when theme/thumb_size changes)"""
+    _checkerboard_cache.clear()
 
 def draw_thumbnail_with_checkerboard(qimg, w, h, use_checkerboard=True):
     """Renders thumbnail QImage onto a checkerboard or flat background pixmap"""

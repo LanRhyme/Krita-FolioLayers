@@ -41,8 +41,15 @@ _LUCIDE_SVGS = {
     "circle-dot": """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>"""
 }
 
+_PIXMAP_CACHE = {}
+
 def get_lucide_pixmap(name, color="#e0e0e0", size=24):
     """Renders a Lucide SVG icon to a QPixmap with target color & dimensions"""
+    cache_key = (name, color, size)
+    cached = _PIXMAP_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     svg_raw = _LUCIDE_SVGS.get(name, _LUCIDE_SVGS["layers"])
     colored_svg = svg_raw.replace('currentColor', color)
 
@@ -56,7 +63,12 @@ def get_lucide_pixmap(name, color="#e0e0e0", size=24):
     renderer.render(painter)
     painter.end()
 
+    _PIXMAP_CACHE[cache_key] = pixmap
     return pixmap
+
+def clear_icon_cache():
+    """Clear the pixmap cache (call when theme changes)"""
+    _PIXMAP_CACHE.clear()
 
 def get_lucide_icon(name, color="#e0e0e0", size=24):
     """Returns a QIcon for a given Lucide icon name and color"""
