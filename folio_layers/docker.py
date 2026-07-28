@@ -80,21 +80,31 @@ class LayerTreeWidget(QTreeWidget):
             event.ignore()
             return
 
-        def _reattach_children(group, saved_children):
-            if group is None or not saved_children:
+        def _backup_subtree(node):
+            """递归备份节点所有后代，包括嵌套子组的子组"""
+            if node.type() != "grouplayer":
+                return None
+            backup = []
+            for child in list(node.childNodes()):
+                backup.append((child, _backup_subtree(child)))
+            return backup
+
+        def _reattach_subtree(group, backup):
+            if group is None or not backup:
                 return
-            for child in saved_children:
+            for child, sub_backup in backup:
                 try:
                     cur_parent = child.parentNode()
-                    if cur_parent is not None and cur_parent.uniqueId() == group.uniqueId():
-                        continue
-                    group.addChildNode(child, None)
+                    if cur_parent is None or cur_parent.uniqueId() != group.uniqueId():
+                        group.addChildNode(child, None)
                 except Exception:
                     pass
+                if sub_backup:
+                    _reattach_subtree(child, sub_backup)
 
         def _reorder_with_children(drag_node, new_parent, above_sibling):
             is_group = drag_node.type() == "grouplayer"
-            saved_children = list(drag_node.childNodes()) if is_group else []
+            saved_tree = _backup_subtree(drag_node) if is_group else None
             old_parent = drag_node.parentNode()
             if old_parent is None:
                 return
@@ -106,8 +116,8 @@ class LayerTreeWidget(QTreeWidget):
                 new_parent.addChildNode(drag_node, above_sibling)
             except Exception:
                 return
-            if is_group:
-                _reattach_children(drag_node, saved_children)
+            if is_group and saved_tree:
+                _reattach_subtree(drag_node, saved_tree)
 
         if drop_ind == QAbstractItemView.DropIndicatorPosition.OnItem:
             if target_node.type() == "grouplayer":
@@ -202,6 +212,9 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self._loading_timer.setSingleShot(True)
         self._loading_timer.timeout.connect(self._finish_loading)
 
+        # 组展开状态：None=首次加载（默认展开），set()=已跟踪
+        self._expanded_uids = None
+
         # 5. 定时刷新与 Krita 事件挂载
         self.sync_timer = QTimer(self)
         self.sync_timer.setInterval(600)
@@ -228,17 +241,17 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             if w: w.refresh_state()
             for i in range(item.childCount()):
                 _update(item.child(i))
-        
+
         for i in range(self.tree.topLevelItemCount()):
             _update(self.tree.topLevelItem(i))
 
     def _on_image_created(self, *args):
         """Krita 创建/加载新图像时进入批处理模式，暂停同步以避免阻塞主线程"""
         self._loading = True
-        self._loading_timer.start(1500)
+        self._loading_timer.start(2000)
 
     def _finish_loading(self):
-        """加载完成（防抖 1.5s 无新信号）后退出加载模式并重建树"""
+        """加载完成（防抖 2s 无新信号）后退出加载模式并重建树"""
         self._loading = False
         self._updating_ui = False
         self.refresh_tree()
@@ -247,7 +260,10 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         """Krita 内置接口，画布切换时自动调用"""
         self.canvas = canvas
         self.apply_theme_qss()
-        self.refresh_tree()
+        # 进入加载模式并防抖：文件加载时 canvasChanged 会连续触发多次，
+        # 避免每次都重建整个图层树
+        self._loading = True
+        self._loading_timer.start(2000)
 
     def apply_theme_qss(self):
         """仅重写悬停与选中状态，以及修复系统 Tooltip 颜色使其在暗色主题下可见"""
@@ -491,6 +507,20 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             return
 
         self._updating_ui = True
+
+        # 保存展开状态，避免重建后所有组都展开
+        if self._expanded_uids is not None:
+            saved = set()
+            def _save(item):
+                w = self.tree.itemWidget(item, 0)
+                if w and hasattr(w, 'node') and w.node and item.isExpanded():
+                    saved.add(str(w.node.uniqueId()))
+                for i in range(item.childCount()):
+                    _save(item.child(i))
+            for i in range(self.tree.topLevelItemCount()):
+                _save(self.tree.topLevelItem(i))
+            self._expanded_uids = saved
+
         self.tree.clear()
 
         doc = Krita.instance().activeDocument()
@@ -505,6 +535,10 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
         if active_node:
             self._update_property_bar_for_node(active_node)
+
+        # 首次加载后转为 set，后续刷新可正常保存/恢复
+        if self._expanded_uids is None:
+            self._expanded_uids = set()
 
         self._updating_ui = False
 
@@ -527,7 +561,10 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
                 self.tree.setCurrentItem(item)
 
             if child.type() == "grouplayer":
-                item.setExpanded(True)
+                if self._expanded_uids is None:
+                    item.setExpanded(True)
+                else:
+                    item.setExpanded(str(child.uniqueId()) in self._expanded_uids)
                 self._populate_node_tree(child, item, active_node)
 
     def _update_property_bar_for_node(self, node):
@@ -559,7 +596,6 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if curr_node:
             self._update_property_bar_for_node(curr_node)
 
-        # 定时器周期性调用更新：让不透明度和缩略图实时跟进改变
         self.update_tree_states()
 
     # ====== 属性事件 ======
