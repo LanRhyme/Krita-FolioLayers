@@ -461,36 +461,3 @@ class LayerRowWidget(QWidget):
             self.name_edit.hide()
             self.name_label.show()
             self.refresh_state()
-
-    def enterEvent(self, event):
-        super().enterEvent(event)
-        cfg = get_config()
-        if not cfg.enable_hover_preview:
-            return
-        if getattr(self.docker, '_hover_active', False):
-            # 浮窗已近期展示过，移动到新图层项时立即更新
-            if self.node:
-                self.docker.show_hover_preview(self.node, QCursor.pos())
-        else:
-            # 首次停留，延迟 3000ms (3秒) 后才弹出
-            self.hover_timer.setInterval(3000)
-            self.hover_timer.start()
-
-    def leaveEvent(self, event):
-        super().leaveEvent(event)
-        pos = QCursor.pos()
-        if not self.rect().contains(self.mapFromGlobal(pos)):
-            self.hover_timer.stop()
-            # 移开图层项时隐藏浮窗
-            self.docker.hover_preview.hide()
-
-    def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        if self.docker.hover_preview.isVisible():
-            self.docker.hover_preview.popup_at(QCursor.pos())
-
-    def _on_hover_timeout(self):
-        cfg = get_config()
-        pos = QCursor.pos()
-        if cfg.enable_hover_preview and self.node and self.rect().contains(self.mapFromGlobal(pos)):
-            self.docker.show_hover_preview(self.node, pos)

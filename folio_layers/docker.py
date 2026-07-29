@@ -27,7 +27,7 @@ except ImportError:
     DockWidget = QWidget
 
 class LayerTreeWidget(QTreeWidget):
-    """支持将拖拽事件转发给 Krita 原生 API 的图层树"""
+    """支持将拖拽事件转发给 Krita 原生 API 的图层树，及集中式 3 秒悬停预览处理"""
     def __init__(self, docker):
         super().__init__()
         self.docker = docker
@@ -35,6 +35,46 @@ class LayerTreeWidget(QTreeWidget):
         self.setAcceptDrops(True)
         self.setDropIndicatorShown(True)
         self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+        self.viewport().installEventFilter(self)
+
+        self._hover_item = None
+        self._hover_timer = QTimer(self)
+        self._hover_timer.setSingleShot(True)
+        self._hover_timer.timeout.connect(self._on_hover_timeout)
+
+    def eventFilter(self, obj, event):
+        if obj == self.viewport():
+            if event.type() == QEvent.Type.MouseMove:
+                from .config import get_config
+                cfg = get_config()
+                if cfg.enable_hover_preview:
+                    item = self.itemAt(event.pos())
+                    if item and item == self._hover_item:
+                        if self.docker.hover_preview.isVisible():
+                            self.docker.hover_preview.popup_at(QCursor.pos())
+                    else:
+                        self._hover_item = item
+                        self.docker.hover_preview.hide()
+                        if item:
+                            self._hover_timer.start(3000)
+                        else:
+                            self._hover_timer.stop()
+            elif event.type() == QEvent.Type.Leave:
+                self._hover_timer.stop()
+                self._hover_item = None
+                self.docker.hover_preview.hide()
+        return super().eventFilter(obj, event)
+
+    def _on_hover_timeout(self):
+        from .config import get_config
+        cfg = get_config()
+        if not cfg.enable_hover_preview or not self._hover_item:
+            return
+        w = self.itemWidget(self._hover_item, 0)
+        if w and w.node:
+            self.docker.show_hover_preview(w.node, QCursor.pos())
 
     def mousePressEvent(self, event):
         """点击空白区域时不取消选中，始终保持至少选择一个图层"""
