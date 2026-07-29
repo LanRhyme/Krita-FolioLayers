@@ -804,10 +804,35 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             self._updating_ui = False
             return
 
+        # 备份当前面板的多选状态，防止定时同步机制清空多选
+        self._selected_uids = set()
+        for item in self.tree.selectedItems():
+            w = self.tree.itemWidget(item, 0)
+            if w and w.node:
+                self._selected_uids.add(str(w.node.uniqueId()))
+
         active_node = doc.activeNode()
         root = doc.rootNode()
 
         self._sync_node_tree(root, None, active_node)
+
+        # 多选状态精准还原
+        if len(self._selected_uids) > 1:
+            self.tree.blockSignals(True)
+            all_items = []
+            def collect_all_items(parent_item):
+                cnt = parent_item.childCount() if parent_item else self.tree.topLevelItemCount()
+                for i in range(cnt):
+                    it = parent_item.child(i) if parent_item else self.tree.topLevelItem(i)
+                    all_items.append(it)
+                    collect_all_items(it)
+            collect_all_items(None)
+
+            for item in all_items:
+                w = self.tree.itemWidget(item, 0)
+                if w and w.node and str(w.node.uniqueId()) in self._selected_uids:
+                    item.setSelected(True)
+            self.tree.blockSignals(False)
 
         if active_node:
             self._update_property_bar_for_node(active_node)
@@ -876,7 +901,9 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
                 else:
                     item.setExpanded(str(node.uniqueId()) in self._expanded_uids)
                 
-            if active_node and node.uniqueId() == active_node.uniqueId():
+            # 仅在非多选状态下设置 setCurrentItem
+            has_multi = len(getattr(self, '_selected_uids', set())) > 1
+            if active_node and node.uniqueId() == active_node.uniqueId() and not has_multi:
                 self.tree.setCurrentItem(item)
                 
             if len(node.childNodes()) > 0:
