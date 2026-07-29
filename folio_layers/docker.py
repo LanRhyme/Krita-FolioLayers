@@ -359,10 +359,22 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             ("filllayer", "填充图层 (Fill Layer)", "palette"),
             ("clonelayer", "克隆图层 (Clone Layer)", "copy"),
             ("filelayer", "文件图层 (File Layer)", "layers"),
+            ("SEP", "", ""),
+            ("ACTION:add_new_transparency_mask", "透明度蒙版 (Transparency Mask)", "eye-off"),
+            ("ACTION:add_new_filter_mask", "滤镜蒙版 (Filter Mask)", "wand-2"),
+            ("ACTION:add_new_colorize_mask", "着色蒙版 (Colorize Mask)", "palette"),
+            ("ACTION:add_new_transform_mask", "变换蒙版 (Transform Mask)", "move"),
         ]
         for t_code, t_name, t_icon in types:
+            if t_code == "SEP":
+                self.new_menu.addSeparator()
+                continue
             act = QAction(get_lucide_icon(t_icon, t.TEXT_MAIN, 14), t_name, self.new_menu)
-            act.triggered.connect(lambda checked, c=t_code: self._create_layer(c))
+            if t_code.startswith("ACTION:"):
+                action_name = t_code.split(":", 1)[1]
+                act.triggered.connect(lambda checked, a=action_name: self._trigger_action(a))
+            else:
+                act.triggered.connect(lambda checked, c=t_code: self._create_layer(c))
             self.new_menu.addAction(act)
 
         # 不使用 PopupMode 以避免原生绘制额外的箭头，直接监听点击弹出
@@ -961,6 +973,10 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         act_group.triggered.connect(self._group_selection)
         menu.addAction(act_group)
 
+        act_clip = QAction(get_lucide_icon("scissors", t.TEXT_MAIN, 14), "快速创建剪切组 (Quick Clip)", menu)
+        act_clip.triggered.connect(lambda: self._trigger_action("create_clipping_group"))
+        menu.addAction(act_clip)
+
         # 图层组特有：穿透开关
         if node.type() == "grouplayer" and hasattr(node, "setPassThroughMode"):
             is_pt = node.passThroughMode()
@@ -978,9 +994,17 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         act_flatten.triggered.connect(lambda: self._trigger_action("flatten_layer"))
         menu.addAction(act_flatten)
         
-        act_rasterize = QAction(get_lucide_icon("image", t.TEXT_MAIN, 14), "栅格化图层 (Rasterize)", menu)
-        act_rasterize.triggered.connect(lambda: self._trigger_action("rasterize_layer"))
+        act_rasterize = QAction(get_lucide_icon("image", t.TEXT_MAIN, 14), "转换为颜料图层 / 栅格化 (Rasterize)", menu)
+        act_rasterize.triggered.connect(lambda: self._trigger_action("convert_to_paint_layer"))
         menu.addAction(act_rasterize)
+
+        act_sel_mask = QAction(get_lucide_icon("box", t.TEXT_MAIN, 14), "转换为选区蒙版 (Selection Mask)", menu)
+        act_sel_mask.triggered.connect(lambda: self._trigger_action("convert_to_selection_mask"))
+        menu.addAction(act_sel_mask)
+
+        act_props = QAction(get_lucide_icon("sliders", t.TEXT_MAIN, 14), "图层属性 (Properties...)", menu)
+        act_props.triggered.connect(lambda: self._trigger_action("layer_properties"))
+        menu.addAction(act_props)
 
         menu.addSeparator()
 
