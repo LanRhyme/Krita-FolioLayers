@@ -530,6 +530,20 @@ class LayerRowWidget(QWidget):
         else:
             self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; border: none; }")
 
+    def _get_target_nodes(self):
+        if not self.docker or not hasattr(self.docker, 'tree'):
+            return [self.node]
+        selected_items = self.docker.tree.selectedItems()
+        nodes = []
+        if selected_items and len(selected_items) > 1:
+            for item in selected_items:
+                w = self.docker.tree.itemWidget(item, 0)
+                if w and w.node:
+                    nodes.append(w.node)
+        if self.node and self.node not in nodes:
+            nodes.append(self.node)
+        return nodes if nodes else ([self.node] if self.node else [])
+
     def _toggle_visibility(self):
         if self.node:
             cfg = get_config()
@@ -555,29 +569,51 @@ class LayerRowWidget(QWidget):
                     self.docker.toggle_solo_raw_mode()
                     return
 
+            targets = self._get_target_nodes()
             new_vis = not self.node.visible()
-            self.node.setVisible(new_vis)
+            for n in targets:
+                try:
+                    n.setVisible(new_vis)
+                except Exception:
+                    pass
             self.docker.refresh_canvas()
-            self.refresh_state()
+            self.docker.refresh_tree()
 
     def _toggle_lock(self):
         if self.node:
+            targets = self._get_target_nodes()
             new_lock = not self.node.locked()
-            self.node.setLocked(new_lock)
-            self.refresh_state()
+            for n in targets:
+                try:
+                    n.setLocked(new_lock)
+                except Exception:
+                    pass
+            self.docker.refresh_tree()
 
     def _toggle_alpha_lock(self):
-        if self.node and hasattr(self.node, 'setAlphaLocked'):
-            new_alock = not self.node.alphaLocked()
-            self.node.setAlphaLocked(new_alock)
-            self.refresh_state()
+        if self.node:
+            targets = self._get_target_nodes()
+            new_alock = not self.node.alphaLocked() if hasattr(self.node, 'alphaLocked') else False
+            for n in targets:
+                if hasattr(n, 'setAlphaLocked'):
+                    try:
+                        n.setAlphaLocked(new_alock)
+                    except Exception:
+                        pass
+            self.docker.refresh_tree()
 
     def _toggle_inherit_alpha(self):
-        if self.node and hasattr(self.node, 'setInheritAlpha'):
-            new_ainherit = not self.node.inheritAlpha()
-            self.node.setInheritAlpha(new_ainherit)
+        if self.node:
+            targets = self._get_target_nodes()
+            new_ainherit = not self.node.inheritAlpha() if hasattr(self.node, 'inheritAlpha') else False
+            for n in targets:
+                if hasattr(n, 'setInheritAlpha'):
+                    try:
+                        n.setInheritAlpha(new_ainherit)
+                    except Exception:
+                        pass
             self.docker.refresh_canvas()
-            self.refresh_state()
+            self.docker.refresh_tree()
 
     def _toggle_pass_through(self):
         if self.node and hasattr(self.node, 'setPassThroughMode'):

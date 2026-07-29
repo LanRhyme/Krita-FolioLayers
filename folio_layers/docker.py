@@ -1275,12 +1275,28 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if not IN_KRITA:
             return
         doc = Krita.instance().activeDocument()
-        if doc and doc.activeNode():
-            node = doc.activeNode()
-            if node != doc.rootNode():
-                node.remove()
-                self.refresh_canvas()
-                self.refresh_tree()
+        if not doc:
+            return
+
+        selected_items = self.tree.selectedItems()
+        target_nodes = []
+        if selected_items:
+            for item in selected_items:
+                w = self.tree.itemWidget(item, 0)
+                if w and w.node and w.node != doc.rootNode():
+                    target_nodes.append(w.node)
+
+        if not target_nodes and doc.activeNode() and doc.activeNode() != doc.rootNode():
+            target_nodes.append(doc.activeNode())
+
+        if target_nodes:
+            for node in target_nodes:
+                try:
+                    node.remove()
+                except Exception:
+                    pass
+            self.refresh_canvas()
+            self.refresh_tree()
 
     def _move_layer(self, direction):
         if not IN_KRITA:
