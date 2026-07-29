@@ -184,41 +184,69 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
-        # 建立滑动面板容器（左划弹出的独显与删除按钮）
+        # 建立滑动面板容器（左划弹出的独显与删除按钮，极简平坦浮动胶囊风格）
         t = get_theme()
         self.swipe_container = QWidget(self)
         self.swipe_container.setFixedHeight(row_h)
-        self.swipe_container.setStyleSheet(f"background: {t.BG_BASE}; border-radius: 2px;")
+        self.swipe_container.setStyleSheet(f"""
+            QWidget {{
+                background-color: {t.BG_DARK};
+                border: 1px solid {t.BORDER};
+                border-radius: 4px;
+            }}
+        """)
         s_layout = QHBoxLayout(self.swipe_container)
-        s_layout.setContentsMargins(1, 1, 1, 1)
-        s_layout.setSpacing(2)
+        s_layout.setContentsMargins(2, 2, 2, 2)
+        s_layout.setSpacing(3)
 
-        self.btn_swipe_solo = QPushButton("独显", self.swipe_container)
-        self.btn_swipe_solo.setFixedSize(45, max(18, row_h - 2))
-        self.btn_swipe_solo.setToolTip("独显当前图层 (重置 100% 不透明度与 Normal 模式便于纯净取色)")
+        btn_h = max(18, row_h - 4)
+
+        self.btn_swipe_solo = QToolButton(self.swipe_container)
+        self.btn_swipe_solo.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.btn_swipe_solo.setIcon(get_lucide_icon("sparkles", "#ffffff", 12))
+        self.btn_swipe_solo.setText(" 独显")
+        self.btn_swipe_solo.setFixedSize(52, btn_h)
+        self.btn_swipe_solo.setToolTip("独显当前图层 (纯净原色模式)")
         self.btn_swipe_solo.setStyleSheet(f"""
-            QPushButton {{
+            QToolButton {{
                 background-color: {t.ACCENT};
                 color: #ffffff;
                 border: none;
-                border-radius: 2px;
-                font-size: 11px;
-                font-weight: bold;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 600;
+                padding: 0 4px;
+            }}
+            QToolButton:hover {{
+                background-color: rgba({t.ACCENT_RGB}, 0.85);
+            }}
+            QToolButton:pressed {{
+                background-color: rgba({t.ACCENT_RGB}, 0.7);
             }}
         """)
         self.btn_swipe_solo.clicked.connect(self._on_swipe_solo_clicked)
 
-        self.btn_swipe_del = QPushButton("删除", self.swipe_container)
-        self.btn_swipe_del.setFixedSize(45, max(18, row_h - 2))
+        self.btn_swipe_del = QToolButton(self.swipe_container)
+        self.btn_swipe_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.btn_swipe_del.setIcon(get_lucide_icon("trash-2", "#ffffff", 12))
+        self.btn_swipe_del.setText(" 删除")
+        self.btn_swipe_del.setFixedSize(52, btn_h)
         self.btn_swipe_del.setToolTip("删除当前图层")
         self.btn_swipe_del.setStyleSheet("""
-            QPushButton {
+            QToolButton {
                 background-color: #e54d42;
                 color: #ffffff;
                 border: none;
-                border-radius: 2px;
-                font-size: 11px;
-                font-weight: bold;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 600;
+                padding: 0 4px;
+            }
+            QToolButton:hover {
+                background-color: #d63629;
+            }
+            QToolButton:pressed {
+                background-color: #b82b1f;
             }
         """)
         self.btn_swipe_del.clicked.connect(self._on_swipe_del_clicked)
@@ -670,7 +698,7 @@ class LayerRowWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def open_swipe(self):
-        w = 98
+        w = 114
         h = self.height()
         if not hasattr(self, '_open_anim'):
             self._open_anim = QPropertyAnimation(self.swipe_container, b"geometry")
@@ -686,7 +714,7 @@ class LayerRowWidget(QWidget):
     def close_swipe(self):
         if not hasattr(self, 'swipe_container') or not self.swipe_container.isVisible():
             return
-        w = 98
+        w = 114
         h = self.height()
         if not hasattr(self, '_close_anim'):
             self._close_anim = QPropertyAnimation(self.swipe_container, b"geometry")
