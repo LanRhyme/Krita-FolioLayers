@@ -453,8 +453,9 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             }}
             QTreeWidget::drop-indicator {{
                 background-color: {t.ACCENT};
-                height: 3px;
-                border-radius: 1.5px;
+                height: 8px;
+                min-height: 8px;
+                border-radius: 4px;
             }}
         """)
 

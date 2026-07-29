@@ -453,11 +453,11 @@ class LayerRowWidget(QWidget):
             self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; border: none; }")
             return
         if pos_str == "above":
-            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: transparent; border-top: 4px solid {t.ACCENT}; }}")
+            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: transparent; border-top: 8px solid {t.ACCENT}; }}")
         elif pos_str == "below":
-            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: transparent; border-bottom: 4px solid {t.ACCENT}; }}")
+            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: transparent; border-bottom: 8px solid {t.ACCENT}; }}")
         elif pos_str == "on":
-            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: rgba({t.ACCENT_RGB}, 0.2); border: 2px solid {t.ACCENT}; }}")
+            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: rgba({t.ACCENT_RGB}, 0.35); border: 3px solid {t.ACCENT}; }}")
         else:
             self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; border: none; }")
 
