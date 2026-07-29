@@ -254,6 +254,11 @@ class LayerRowWidget(QWidget):
 
         ntype = self.node.type()
         type_info = get_layer_type_info(ntype)
+        is_group = (ntype == "grouplayer")
+
+        # 获取可见性
+        vis = self.node.visible()
+
         # 检查是否有子节点（包含图层组及挂载了蒙版的图层）
         try:
             has_children = (is_group or len(self.node.childNodes()) > 0)
