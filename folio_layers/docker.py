@@ -824,6 +824,18 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         max_idx = get_max_index(doc.rootNode(), base_name)
         final_name = f"{base_name}{max_idx + 1}"
 
+        # 特殊图层类型需要属性配置或生成器，必须触发 Krita 原生 Action 弹窗
+        action_map = {
+            "filllayer": "add_new_fill_layer",
+            "filterlayer": "add_new_filter_layer",
+            "filelayer": "add_new_file_layer",
+            "clonelayer": "add_new_clone_layer",
+            "adjustmentlayer": "add_new_adjustment_layer",
+        }
+        if layer_type in action_map:
+            self._trigger_action(action_map[layer_type])
+            return
+
         if layer_type == "grouplayer":
             try:
                 new_node = doc.createGroupLayer(final_name)
