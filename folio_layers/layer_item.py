@@ -4,7 +4,7 @@
 from .qt_compat import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QLineEdit,
     Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent,
-    QPainter
+    QPainter, QApplication
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap
 from .hover_preview import get_layer_type_info, COLOR_LABEL_MAP
