@@ -533,7 +533,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self._loading_timer.start(1500)
 
     def apply_theme_qss(self):
-        """仅重写悬停与选中状态，以及修复系统 Tooltip 颜色使其在暗色主题下可见"""
+        """应用平坦化、极简统一的主题 QSS 样式表"""
         t = get_theme()
 
         # 主题变更时清除图标缓存（颜色变了需要重新渲染）
@@ -544,17 +544,85 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         pal.setColor(QPalette.ColorRole.ToolTipBase, QColor(t.BG_BASE))
         pal.setColor(QPalette.ColorRole.ToolTipText, QColor("#f0f0f0"))
         QApplication.instance().setPalette(pal)
-        QApplication.instance().setStyleSheet(f"""
+
+        self.setStyleSheet(f"""
+            QWidget {{
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                font-size: 11px;
+                color: {t.TEXT_MAIN};
+            }}
             QToolTip {{
                 background-color: {t.BG_BASE};
                 color: #f0f0f0;
                 border: 1px solid {t.BORDER};
-                padding: 3px 6px;
+                border-radius: 4px;
+                padding: 4px 8px;
                 font-size: 11px;
+            }}
+            QFrame#ToolbarFrame {{
+                background: transparent;
+                border-bottom: 1px solid rgba({t.ACCENT_RGB}, 0.08);
+            }}
+            QFrame#PropCard {{
+                background: {t.BG_DARK};
+                border: 1px solid {t.BORDER};
+                border-radius: 4px;
+                padding: 1px 4px;
+            }}
+            QLineEdit {{
+                background-color: {t.BG_DARK};
+                color: {t.TEXT_MAIN};
+                border: 1px solid {t.BORDER};
+                border-radius: 4px;
+                padding: 3px 8px;
+                font-size: 11px;
+            }}
+            QLineEdit:focus {{
+                border: 1px solid {t.ACCENT};
+            }}
+            QToolButton, QPushButton {{
+                background: transparent;
+                color: {t.TEXT_MAIN};
+                border: 1px solid transparent;
+                border-radius: 4px;
+                padding: 2px;
+            }}
+            QToolButton:hover, QPushButton:hover {{
+                background-color: rgba({t.ACCENT_RGB}, 0.12);
+                border: 1px solid rgba({t.ACCENT_RGB}, 0.25);
+            }}
+            QToolButton:pressed, QPushButton:pressed {{
+                background-color: rgba({t.ACCENT_RGB}, 0.25);
+            }}
+            QMenu {{
+                background-color: {t.BG_DARK};
+                color: {t.TEXT_MAIN};
+                border: 1px solid {t.BORDER};
+                border-radius: 6px;
+                padding: 4px 0px;
+            }}
+            QMenu::item {{
+                padding: 5px 24px 5px 12px;
+                border-radius: 3px;
+                margin: 1px 4px;
+            }}
+            QMenu::item:selected {{
+                background-color: rgba({t.ACCENT_RGB}, 0.18);
+                color: {t.TEXT_MAIN};
+            }}
+            QMenu::separator {{
+                height: 1px;
+                background-color: {t.BORDER};
+                margin: 4px 8px;
             }}
         """)
 
         self.tree.setStyleSheet(f"""
+            QTreeWidget {{
+                background-color: transparent;
+                border: none;
+                outline: none;
+            }}
             QTreeWidget::branch {{
                 border-image: none;
                 image: none;
@@ -562,23 +630,23 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             }}
             QTreeWidget::item {{
                 border: 1px solid transparent;
-                border-radius: 2px;
+                border-radius: 4px;
                 padding: 0px;
-                margin-bottom: 1px;
+                margin-bottom: 2px;
             }}
             QTreeWidget::item:hover {{
-                border: 1px solid {t.ACCENT};
-                background-color: transparent;
+                border: 1px solid rgba({t.ACCENT_RGB}, 0.35);
+                background-color: rgba({t.ACCENT_RGB}, 0.08);
             }}
             QTreeWidget::item:selected {{
                 border: 1px solid {t.ACCENT};
-                background-color: rgba({t.ACCENT_RGB}, 0.15);
+                background-color: rgba({t.ACCENT_RGB}, 0.18);
             }}
             QTreeWidget::drop-indicator {{
                 background-color: {t.ACCENT};
-                height: 8px;
-                min-height: 8px;
-                border-radius: 4px;
+                height: 6px;
+                min-height: 6px;
+                border-radius: 3px;
             }}
         """)
 
