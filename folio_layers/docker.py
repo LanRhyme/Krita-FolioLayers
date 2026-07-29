@@ -710,7 +710,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if curr_node:
             self._update_property_bar_for_node(curr_node)
 
-        self.update_tree_states()
+        self.refresh_tree()
 
     # ====== 属性事件 ======
     def _on_item_expanded(self, item):
@@ -834,6 +834,10 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         }
         if layer_type in action_map:
             self._trigger_action(action_map[layer_type])
+            # 延时轮询，确保用户在原生弹窗中点击确定后，图层面板能第一时间显示新图层
+            QTimer.singleShot(500, self.refresh_tree)
+            QTimer.singleShot(1500, self.refresh_tree)
+            QTimer.singleShot(3000, self.refresh_tree)
             return
 
         if layer_type == "grouplayer":
