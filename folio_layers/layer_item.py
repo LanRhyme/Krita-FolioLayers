@@ -4,7 +4,7 @@
 from .qt_compat import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QPushButton, QLineEdit,
     Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent,
-    QPainter, QApplication, QPen, QPropertyAnimation, QRect
+    QPainter, QApplication, QPen, QPropertyAnimation, QRect, QPoint, QSizePolicy
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap
 from .hover_preview import get_layer_type_info, COLOR_LABEL_MAP
@@ -15,53 +15,41 @@ from .config import (
 from .blending_modes import get_blending_mode_name
 
 class IndentGuideWidget(QWidget):
-    """绘制多层图层嵌套的深层导轨连线"""
+    """绘制层级缩进参考线的极简组件"""
+
     def __init__(self, depth, step=16, parent=None):
         super().__init__(parent)
         self.depth = depth
         self.step = step
-        self.setFixedWidth(step * depth)
+        self.setFixedWidth(depth * step)
 
     def paintEvent(self, event):
-        super().paintEvent(event)
-        if self.depth <= 0:
-            return
         t = get_theme()
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-        
-        pen = QPen(QColor(t.TEXT_MUTED))
-        pen.setWidth(1)
-        pen.setStyle(Qt.PenStyle.SolidLine)
-        p.setOpacity(0.35)
-        p.setPen(pen)
+        painter = QPainter(self)
+        pen = QPen(QColor(t.BORDER), 1, Qt.PenStyle.SolidLine)
+        painter.setPen(pen)
 
-        h = self.height()
-        for d in range(self.depth):
-            x = d * self.step + (self.step // 2)
-            p.drawLine(x, 0, x, h)
-        p.end()
+        for i in range(self.depth):
+            x = i * self.step + self.step // 2
+            painter.drawLine(x, 0, x, self.height())
+        painter.end()
+
 
 class LayerRowWidget(QWidget):
-    """自适应图层列表项 Widget (与官方一致的两行/单行布局)"""
+    """Procreate / iOS 风格原生图层滑动显露面板 Widget"""
 
-    def __init__(self, node, tree_item, docker, parent=None):
-        super().__init__(parent)
+    def __init__(self, node, tree_item=None, docker=None):
+        super().__init__()
         self.node = node
         self.tree_item = tree_item
         self.docker = docker
-
-        # 缩略图懒加载：避免建树时同步阻塞，延迟到事件循环空闲时加载
-        self._thumb_timer = QTimer(self)
-        self._thumb_timer.setSingleShot(True)
-        self._thumb_timer.setInterval(80)
-        self._thumb_timer.timeout.connect(self._load_thumbnail)
+        self.setObjectName("LayerRowWidget")
 
         cfg = get_config()
-
-        # 只要缩略图 >= 20px 且有显示必要，即可提供两行空间
+        t = get_theme()
         self.has_ample_space = (cfg.thumb_size >= 20)
 
+        # 根据配置详情级别确定控件标准行高
         if cfg.detail_level == DETAIL_NONE:
             row_h = max(20, cfg.thumb_size + 2)
         elif cfg.detail_level == DETAIL_COMPACT:
@@ -74,12 +62,81 @@ class LayerRowWidget(QWidget):
         self.setFixedHeight(row_h)
         self.tree_item.setSizeHint(0, QSize(0, row_h))
         self.setMouseTracking(True)
-        self.setObjectName("LayerRowWidget")
-        # 必须透明以显示 QTreeWidget 选中的系统高亮背景色
         self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; }")
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 1, 2, 1) # Left margin 0 to accommodate select button
+        # ====== 1. 底层背景操作面板 (全高贴右，图层内容向左滑动时显露出按钮) ======
+        self.swipe_container = QWidget(self)
+        self.swipe_container.setGeometry(self.width() - 110, 0, 110, row_h)
+        self.swipe_container.setStyleSheet(f"""
+            QWidget {{
+                background-color: {t.BG_DARK};
+                border-radius: 4px;
+            }}
+        """)
+        s_layout = QHBoxLayout(self.swipe_container)
+        s_layout.setContentsMargins(1, 1, 1, 1)
+        s_layout.setSpacing(2)
+
+        self.btn_swipe_solo = QToolButton(self.swipe_container)
+        self.btn_swipe_solo.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.btn_swipe_solo.setIcon(get_lucide_icon("sparkles", t.ACCENT, 12))
+        self.btn_swipe_solo.setText(" 独显")
+        self.btn_swipe_solo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.btn_swipe_solo.setToolTip("独显当前图层 (纯净原色模式)")
+        self.btn_swipe_solo.setStyleSheet(f"""
+            QToolButton {{
+                background-color: rgba({t.ACCENT_RGB}, 0.16);
+                color: {t.ACCENT};
+                border: 1px solid rgba({t.ACCENT_RGB}, 0.35);
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 600;
+            }}
+            QToolButton:hover {{
+                background-color: rgba({t.ACCENT_RGB}, 0.32);
+                border: 1px solid {t.ACCENT};
+            }}
+            QToolButton:pressed {{
+                background-color: rgba({t.ACCENT_RGB}, 0.5);
+            }}
+        """)
+        self.btn_swipe_solo.clicked.connect(self._on_swipe_solo_clicked)
+
+        self.btn_swipe_del = QToolButton(self.swipe_container)
+        self.btn_swipe_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.btn_swipe_del.setIcon(get_lucide_icon("trash-2", "#e55046", 12))
+        self.btn_swipe_del.setText(" 删除")
+        self.btn_swipe_del.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.btn_swipe_del.setToolTip("删除当前图层")
+        self.btn_swipe_del.setStyleSheet(f"""
+            QToolButton {{
+                background-color: rgba(229, 80, 70, 0.16);
+                color: #e55046;
+                border: 1px solid rgba(229, 80, 70, 0.35);
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 600;
+            }}
+            QToolButton:hover {{
+                background-color: rgba(229, 80, 70, 0.32);
+                border: 1px solid #e55046;
+            }}
+            QToolButton:pressed {{
+                background-color: rgba(229, 80, 70, 0.5);
+            }}
+        """)
+        self.btn_swipe_del.clicked.connect(self._on_swipe_del_clicked)
+
+        s_layout.addWidget(self.btn_swipe_solo)
+        s_layout.addWidget(self.btn_swipe_del)
+
+        # ====== 2. 表层图层内容面板 (覆盖在最上方，平滑左划向左偏移) ======
+        self.content_widget = QWidget(self)
+        self.content_widget.setGeometry(0, 0, self.width(), row_h)
+        self.content_widget.raise_()
+
+        layout = QHBoxLayout(self.content_widget)
+        layout.setContentsMargins(0, 1, 2, 1)
         layout.setSpacing(4)
 
         # 0. 快速多选按钮 (左侧空白区域)
@@ -184,82 +241,7 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
-        # 建立滑动面板容器（左划弹出的独显与删除按钮，与行内按钮像素级顶端对齐）
-        t = get_theme()
-        c_h = 18
-        btn_h = 18
-
-        self.swipe_container = QWidget(self)
-        self.swipe_container.setFixedHeight(c_h)
-        self.swipe_container.setStyleSheet(f"""
-            QWidget {{
-                background-color: {t.BG_DARK};
-                border: 1px solid {t.BORDER};
-                border-radius: 4px;
-            }}
-        """)
-        s_layout = QHBoxLayout(self.swipe_container)
-        s_layout.setContentsMargins(0, 0, 0, 0)
-        s_layout.setSpacing(2)
-
-        self.btn_swipe_solo = QToolButton(self.swipe_container)
-        self.btn_swipe_solo.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.btn_swipe_solo.setIcon(get_lucide_icon("sparkles", t.ACCENT, 11))
-        self.btn_swipe_solo.setText(" 独显")
-        self.btn_swipe_solo.setFixedSize(46, btn_h)
-        self.btn_swipe_solo.setToolTip("独显当前图层 (纯净原色模式)")
-        self.btn_swipe_solo.setStyleSheet(f"""
-            QToolButton {{
-                background-color: rgba({t.ACCENT_RGB}, 0.15);
-                color: {t.ACCENT};
-                border: 1px solid rgba({t.ACCENT_RGB}, 0.35);
-                border-radius: 3px;
-                font-size: 10px;
-                font-weight: 600;
-                padding: 0 2px;
-            }}
-            QToolButton:hover {{
-                background-color: rgba({t.ACCENT_RGB}, 0.3);
-                border: 1px solid {t.ACCENT};
-            }}
-            QToolButton:pressed {{
-                background-color: rgba({t.ACCENT_RGB}, 0.45);
-            }}
-        """)
-        self.btn_swipe_solo.clicked.connect(self._on_swipe_solo_clicked)
-
-        self.btn_swipe_del = QToolButton(self.swipe_container)
-        self.btn_swipe_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.btn_swipe_del.setIcon(get_lucide_icon("trash-2", "#e55046", 11))
-        self.btn_swipe_del.setText(" 删除")
-        self.btn_swipe_del.setFixedSize(46, btn_h)
-        self.btn_swipe_del.setToolTip("删除当前图层")
-        self.btn_swipe_del.setStyleSheet(f"""
-            QToolButton {{
-                background-color: rgba(229, 80, 70, 0.15);
-                color: #e55046;
-                border: 1px solid rgba(229, 80, 70, 0.35);
-                border-radius: 3px;
-                font-size: 10px;
-                font-weight: 600;
-                padding: 0 2px;
-            }}
-            QToolButton:hover {{
-                background-color: rgba(229, 80, 70, 0.3);
-                border: 1px solid #e55046;
-            }}
-            QToolButton:pressed {{
-                background-color: rgba(229, 80, 70, 0.45);
-            }}
-        """)
-        self.btn_swipe_del.clicked.connect(self._on_swipe_del_clicked)
-
-        s_layout.addWidget(self.btn_swipe_solo)
-        s_layout.addWidget(self.btn_swipe_del)
-        self.swipe_container.hide()
-
         self._init_native_styles()
-
         self.refresh_state()
 
     def _init_native_styles(self):
@@ -701,34 +683,23 @@ class LayerRowWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def open_swipe(self):
-        h = 18
-        w = 96
-        y = 2
         if not hasattr(self, '_open_anim'):
-            self._open_anim = QPropertyAnimation(self.swipe_container, b"geometry")
+            self._open_anim = QPropertyAnimation(self.content_widget, b"pos")
             self._open_anim.setDuration(160)
 
-        self.swipe_container.show()
-        self.swipe_container.raise_()
         self._open_anim.stop()
-        self._open_anim.setStartValue(QRect(self.width(), y, w, h))
-        self._open_anim.setEndValue(QRect(self.width() - w - 2, y, w, h))
+        self._open_anim.setStartValue(QPoint(0, 0))
+        self._open_anim.setEndValue(QPoint(-110, 0))
         self._open_anim.start()
 
     def close_swipe(self):
-        if not hasattr(self, 'swipe_container') or not self.swipe_container.isVisible():
-            return
-        h = 18
-        w = 96
-        y = 2
         if not hasattr(self, '_close_anim'):
-            self._close_anim = QPropertyAnimation(self.swipe_container, b"geometry")
+            self._close_anim = QPropertyAnimation(self.content_widget, b"pos")
             self._close_anim.setDuration(120)
-            self._close_anim.finished.connect(self._on_close_anim_finished)
 
         self._close_anim.stop()
-        self._close_anim.setStartValue(QRect(self.width() - w - 2, y, w, h))
-        self._close_anim.setEndValue(QRect(self.width(), y, w, h))
+        self._close_anim.setStartValue(self.content_widget.pos())
+        self._close_anim.setEndValue(QPoint(0, 0))
         self._close_anim.start()
 
     def _on_close_anim_finished(self):
