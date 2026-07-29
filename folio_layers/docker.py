@@ -108,7 +108,65 @@ class LayerTreeWidget(QTreeWidget):
         if vbar:
             vbar.setValue(vbar.value() + self._scroll_step)
 
+    def paintEvent(self, event):
+        super().paintEvent(event)
+
+        # 自定义高对比度 6px 粗体拖拽插入指示线 + 圆点手柄
+        if getattr(self, '_drag_active', False) and getattr(self, '_drag_target_item', None):
+            item = self._drag_target_item
+            drop_ind = getattr(self, '_drag_drop_ind', None)
+            rect = self.visualItemRect(item)
+            if not rect.isValid():
+                return
+
+            above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
+            below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
+            on_item = getattr(QAbstractItemView.DropIndicatorPosition, 'OnItem', None)
+
+            from .theme import get_theme
+            t = get_theme()
+            p = QPainter(self.viewport())
+            p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            
+            accent_col = QColor(t.ACCENT)
+
+            if drop_ind == above:
+                y = rect.top()
+                # 6px 粗度中轴实线
+                pen = QPen(accent_col, 6)
+                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                p.setPen(pen)
+                p.drawLine(rect.left() + 8, y, rect.right() - 4, y)
+
+                # 左端点手柄 (10px 圆点)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(accent_col)
+                p.drawEllipse(QPoint(rect.left() + 8, y), 5, 5)
+
+            elif drop_ind == below:
+                y = rect.bottom()
+                pen = QPen(accent_col, 6)
+                pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                p.setPen(pen)
+                p.drawLine(rect.left() + 8, y, rect.right() - 4, y)
+
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(accent_col)
+                p.drawEllipse(QPoint(rect.left() + 8, y), 5, 5)
+
+            elif drop_ind == on_item:
+                # 嵌入图层组：3px 边框 + 半透明蒙层
+                pen = QPen(accent_col, 3)
+                p.setPen(pen)
+                p.setBrush(QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 50))
+                p.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 4, 4)
+
+            p.end()
+
     def _clear_drag_indicator(self):
+        self._drag_active = False
+        self._drag_target_item = None
+        self._drag_drop_ind = None
         if hasattr(self, '_active_drag_widget') and self._active_drag_widget:
             try:
                 self._active_drag_widget.set_drop_indicator(None)
@@ -116,6 +174,7 @@ class LayerTreeWidget(QTreeWidget):
                 pass
             self._active_drag_widget = None
             self._active_drag_pos = None
+        self.viewport().update()
 
     def dragMoveEvent(self, event):
         super().dragMoveEvent(event)
@@ -144,10 +203,14 @@ class LayerTreeWidget(QTreeWidget):
             self._scroll_step = 0
             self._auto_scroll_timer.stop()
 
-        # 粗线拖拽插入指示器高亮
+        # 记录拖拽插入目标并重绘 viewport
         target_item = self.itemAt(pos)
         target_widget = self.itemWidget(target_item, 0) if target_item else None
         drop_ind = self.dropIndicatorPosition()
+        
+        self._drag_active = True
+        self._drag_target_item = target_item
+        self._drag_drop_ind = drop_ind
         
         above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
         below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
@@ -156,11 +219,17 @@ class LayerTreeWidget(QTreeWidget):
         pos_str = "above" if drop_ind == above else ("below" if drop_ind == below else ("on" if drop_ind == on_item else None))
 
         if getattr(self, '_active_drag_widget', None) != target_widget or getattr(self, '_active_drag_pos', None) != pos_str:
-            self._clear_drag_indicator()
+            if hasattr(self, '_active_drag_widget') and self._active_drag_widget:
+                try:
+                    self._active_drag_widget.set_drop_indicator(None)
+                except Exception:
+                    pass
             if target_widget and hasattr(target_widget, 'set_drop_indicator'):
                 target_widget.set_drop_indicator(pos_str)
                 self._active_drag_widget = target_widget
                 self._active_drag_pos = pos_str
+
+        self.viewport().update()
 
     def dragLeaveEvent(self, event):
         self._scroll_dir = 0
