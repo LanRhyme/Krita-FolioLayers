@@ -108,7 +108,7 @@ class LayerTreeWidget(QTreeWidget):
 
     def dragMoveEvent(self, event):
         super().dragMoveEvent(event)
-        margin = 40
+        margin = 30
         vp = self.viewport()
         pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
         y = pos.y()
@@ -116,14 +116,14 @@ class LayerTreeWidget(QTreeWidget):
         if y < margin:
             dist = max(0, y)
             ratio = (margin - dist) / margin
-            self._scroll_step = -int(2 + ratio * 5)
+            self._scroll_step = -int(1 + ratio * 2.5)
             self._scroll_dir = -1
             if not self._auto_scroll_timer.isActive():
                 self._auto_scroll_timer.start()
         elif vp.height() - y < margin:
             dist = max(0, vp.height() - y)
             ratio = (margin - dist) / margin
-            self._scroll_step = int(2 + ratio * 5)
+            self._scroll_step = int(1 + ratio * 2.5)
             self._scroll_dir = 1
             if not self._auto_scroll_timer.isActive():
                 self._auto_scroll_timer.start()
