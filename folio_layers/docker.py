@@ -6,7 +6,7 @@ from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
     Qt, QSize, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
-    QEvent
+    QEvent, QPainter, QPen, QPoint
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
