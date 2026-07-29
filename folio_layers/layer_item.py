@@ -184,9 +184,9 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
-        # 建立滑动面板容器（左划弹出的独显与删除按钮，响应式莫兰迪胶囊风格）
+        # 建立滑动面板容器（左划弹出的独显与删除按钮，极简平坦 Morandi 4px 浮窗）
         t = get_theme()
-        c_h = max(24, row_h - 4)
+        c_h = max(22, row_h - 2)
         btn_h = c_h - 4
 
         self.swipe_container = QWidget(self)
@@ -195,7 +195,7 @@ class LayerRowWidget(QWidget):
             QWidget {{
                 background-color: {t.BG_DARK};
                 border: 1px solid {t.BORDER};
-                border-radius: {c_h // 2}px;
+                border-radius: 4px;
             }}
         """)
         s_layout = QHBoxLayout(self.swipe_container)
@@ -213,7 +213,7 @@ class LayerRowWidget(QWidget):
                 background-color: rgba({t.ACCENT_RGB}, 0.15);
                 color: {t.ACCENT};
                 border: 1px solid rgba({t.ACCENT_RGB}, 0.35);
-                border-radius: {btn_h // 2}px;
+                border-radius: 3px;
                 font-size: 10px;
                 font-weight: 600;
                 padding: 0 3px;
@@ -239,7 +239,7 @@ class LayerRowWidget(QWidget):
                 background-color: rgba(229, 80, 70, 0.15);
                 color: #e55046;
                 border: 1px solid rgba(229, 80, 70, 0.35);
-                border-radius: {btn_h // 2}px;
+                border-radius: 3px;
                 font-size: 10px;
                 font-weight: 600;
                 padding: 0 3px;
@@ -702,9 +702,9 @@ class LayerRowWidget(QWidget):
 
     def open_swipe(self):
         row_h = self.height() if self.height() > 10 else 28
-        h = max(24, row_h - 4)
+        h = max(22, row_h - 2)
         w = 104
-        y = (row_h - h) // 2
+        y = max(0, (row_h - h) // 2)
         if not hasattr(self, '_open_anim'):
             self._open_anim = QPropertyAnimation(self.swipe_container, b"geometry")
             self._open_anim.setDuration(160)
@@ -720,9 +720,9 @@ class LayerRowWidget(QWidget):
         if not hasattr(self, 'swipe_container') or not self.swipe_container.isVisible():
             return
         row_h = self.height() if self.height() > 10 else 28
-        h = max(24, row_h - 4)
+        h = max(22, row_h - 2)
         w = 104
-        y = (row_h - h) // 2
+        y = max(0, (row_h - h) // 2)
         if not hasattr(self, '_close_anim'):
             self._close_anim = QPropertyAnimation(self.swipe_container, b"geometry")
             self._close_anim.setDuration(120)
