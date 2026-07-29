@@ -5,7 +5,8 @@ import sys
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
-    Qt, QSize, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette
+    Qt, QSize, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
+    QEvent
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
@@ -46,7 +47,11 @@ class LayerTreeWidget(QTreeWidget):
 
     def eventFilter(self, obj, event):
         if obj == self.viewport():
-            if event.type() == QEvent.Type.MouseMove:
+            ev_type = event.type()
+            ev_mouse_move = getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None))
+            ev_leave = getattr(QEvent, 'Leave', getattr(getattr(QEvent, 'Type', None), 'Leave', None))
+
+            if ev_type == ev_mouse_move:
                 from .config import get_config
                 cfg = get_config()
                 if cfg.enable_hover_preview:
@@ -61,7 +66,7 @@ class LayerTreeWidget(QTreeWidget):
                             self._hover_timer.start(3000)
                         else:
                             self._hover_timer.stop()
-            elif event.type() == QEvent.Type.Leave:
+            elif ev_type == ev_leave:
                 self._hover_timer.stop()
                 self._hover_item = None
                 self.docker.hover_preview.hide()
