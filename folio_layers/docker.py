@@ -195,6 +195,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         main_layout.addWidget(self.search_input)
 
         # 4. 图层树形列表 (使用支持拖拽排序的自定义 TreeWidget)
+        self.thumbnail_cache = {}
         self.tree = LayerTreeWidget(self)
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(0) # 缩进由 LayerRowWidget 内部接管，保证左侧对齐
@@ -520,66 +521,98 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self._updating_ui = True
         self.tree.setUpdatesEnabled(False)
 
-        # 保存展开状态，避免重建后所有组都展开
-        if self._expanded_uids is not None:
-            saved = set()
-            def _save(item):
-                w = self.tree.itemWidget(item, 0)
-                if w and hasattr(w, 'node') and w.node and item.isExpanded():
-                    saved.add(str(w.node.uniqueId()))
-                for i in range(item.childCount()):
-                    _save(item.child(i))
-            for i in range(self.tree.topLevelItemCount()):
-                _save(self.tree.topLevelItem(i))
-            self._expanded_uids = saved
-
-        self.tree.clear()
-
         doc = Krita.instance().activeDocument()
         if not doc:
-            self._updating_ui = False
+            self.tree.clear()
             self.tree.setUpdatesEnabled(True)
+            self._updating_ui = False
             return
 
         active_node = doc.activeNode()
         root = doc.rootNode()
 
-        self._populate_node_tree(root, None, active_node)
+        self._sync_node_tree(root, None, active_node)
 
         if active_node:
             self._update_property_bar_for_node(active_node)
 
-        # 首次加载后转为 set，后续刷新可正常保存/恢复
-        if self._expanded_uids is None:
-            self._expanded_uids = set()
-
         self.tree.setUpdatesEnabled(True)
         self._updating_ui = False
 
-    def _populate_node_tree(self, parent_node, parent_tree_item, active_node):
+    def _sync_node_tree(self, parent_node, parent_tree_item, active_node):
+        from .layer_item import LayerRowWidget
         children = parent_node.childNodes()
-        for child in reversed(children):
-            if child.type() == "selectionmask":
-                continue
-
-            item = QTreeWidgetItem()
-            if parent_tree_item:
-                parent_tree_item.addChild(item)
+        target_nodes = [c for c in reversed(children) if c.type() != "selectionmask"]
+        
+        current_items = []
+        if parent_tree_item:
+            for i in range(parent_tree_item.childCount()):
+                current_items.append(parent_tree_item.child(i))
+        else:
+            for i in range(self.tree.topLevelItemCount()):
+                current_items.append(self.tree.topLevelItem(i))
+                
+        item_map = {}
+        for item in current_items:
+            w = self.tree.itemWidget(item, 0)
+            if w and w.node:
+                item_map[str(w.node.uniqueId())] = item
+                
+        for i, node in enumerate(target_nodes):
+            uid = str(node.uniqueId())
+            if uid in item_map:
+                item = item_map[uid]
+                del item_map[uid]
+                
+                if parent_tree_item:
+                    current_idx = parent_tree_item.indexOfChild(item)
+                    if current_idx != i:
+                        parent_tree_item.takeChild(current_idx)
+                        parent_tree_item.insertChild(i, item)
+                else:
+                    current_idx = self.tree.indexOfTopLevelItem(item)
+                    if current_idx != i:
+                        self.tree.takeTopLevelItem(current_idx)
+                        self.tree.insertTopLevelItem(i, item)
+                        
+                w = self.tree.itemWidget(item, 0)
+                if not w:
+                    w = LayerRowWidget(node, item, self)
+                    self.tree.setItemWidget(item, 0, w)
+                    
+                needs_thumb = (active_node is None) or (active_node and node.uniqueId() == active_node.uniqueId())
+                if hasattr(w, 'refresh_state_with_thumb'):
+                    w.refresh_state_with_thumb(needs_thumb)
+                else:
+                    w.refresh_state()
             else:
-                self.tree.addTopLevelItem(item)
-
-            row_widget = LayerRowWidget(child, item, self)
-            self.tree.setItemWidget(item, 0, row_widget)
-
-            if active_node and child.uniqueId() == active_node.uniqueId():
-                self.tree.setCurrentItem(item)
-
-            if child.type() == "grouplayer":
+                item = QTreeWidgetItem()
+                if parent_tree_item:
+                    parent_tree_item.insertChild(i, item)
+                else:
+                    self.tree.insertTopLevelItem(i, item)
+                    
+                w = LayerRowWidget(node, item, self)
+                self.tree.setItemWidget(item, 0, w)
+                
                 if self._expanded_uids is None:
                     item.setExpanded(True)
                 else:
-                    item.setExpanded(str(child.uniqueId()) in self._expanded_uids)
-                self._populate_node_tree(child, item, active_node)
+                    item.setExpanded(str(node.uniqueId()) in self._expanded_uids)
+                
+            if active_node and node.uniqueId() == active_node.uniqueId():
+                self.tree.setCurrentItem(item)
+                
+            if node.type() == "grouplayer":
+                self._sync_node_tree(node, item, active_node)
+                
+        for uid, item in item_map.items():
+            if parent_tree_item:
+                parent_tree_item.removeChild(item)
+            else:
+                idx = self.tree.indexOfTopLevelItem(item)
+                if idx >= 0:
+                    self.tree.takeTopLevelItem(idx)
 
     def _update_property_bar_for_node(self, node):
         if not node:

@@ -48,6 +48,7 @@ class LayerRowWidget(QWidget):
             row_h = max(32 if self.has_ample_space else 24, cfg.thumb_size + 4)
 
         self.setFixedHeight(row_h)
+        self.tree_item.setSizeHint(0, QSize(0, row_h))
         self.setMouseTracking(True)
         self.setObjectName("LayerRowWidget")
         # 必须透明以显示 QTreeWidget 选中的系统高亮背景色
@@ -341,7 +342,12 @@ class LayerRowWidget(QWidget):
         except Exception:
             self.inherit_alpha_btn.hide()
 
-        # 缩略图：延迟加载，避免同步阻塞（实际加载在 _load_thumbnail 中）
+# 尝试从缓存中立即加载旧的缩略图以消除闪烁
+        uid = str(self.node.uniqueId())
+        if hasattr(self.docker, 'thumbnail_cache') and uid in self.docker.thumbnail_cache:
+            self.thumb_label.setPixmap(self.docker.thumbnail_cache[uid])
+
+        # 启动定时器以后台更新最新缩略图
         self._thumb_timer.start()
 
         # 隐藏图层时整体降低不透明度（文本调色 + 缩略图叠加半透明遮罩）
