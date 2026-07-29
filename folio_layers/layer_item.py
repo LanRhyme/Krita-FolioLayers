@@ -4,7 +4,7 @@
 from .qt_compat import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QPushButton, QLineEdit,
     Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent,
-    QPainter, QApplication, QPen
+    QPainter, QApplication, QPen, QPropertyAnimation, QRect
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap
 from .hover_preview import get_layer_type_info, COLOR_LABEL_MAP
@@ -517,16 +517,29 @@ class LayerRowWidget(QWidget):
 
     def _toggle_visibility(self):
         if self.node:
-            # 按住 Alt 键点击眼睛图标：快捷开启/关闭独显模式
+            cfg = get_config()
+            shortcut = cfg.solo_shortcut
             modifiers = QApplication.keyboardModifiers()
-            if modifiers & Qt.KeyboardModifier.AltModifier:
+            is_shortcut = False
+            if shortcut == "Ctrl+Click" and (modifiers & Qt.KeyboardModifier.ControlModifier):
+                is_shortcut = True
+            elif shortcut == "Alt+Click" and (modifiers & Qt.KeyboardModifier.AltModifier):
+                is_shortcut = True
+            elif shortcut == "Shift+Click" and (modifiers & Qt.KeyboardModifier.ShiftModifier):
+                is_shortcut = True
+
+            if is_shortcut:
                 if self.docker and hasattr(self.docker, 'enable_solo'):
                     self.docker.enable_solo(self.node)
                     return
+
             solo_uid = getattr(self.docker, '_solo_node_uid', None)
             if solo_uid and str(self.node.uniqueId()) == solo_uid:
-                self.docker.disable_solo()
-                return
+                # 独显状态下再点击眼睛按钮：切换 纯净原色模式 与 原图层效果
+                if self.docker and hasattr(self.docker, 'toggle_solo_raw_mode'):
+                    self.docker.toggle_solo_raw_mode()
+                    return
+
             new_vis = not self.node.visible()
             self.node.setVisible(new_vis)
             self.docker.refresh_canvas()
@@ -608,12 +621,35 @@ class LayerRowWidget(QWidget):
     def open_swipe(self):
         w = 98
         h = self.height()
-        self.swipe_container.setGeometry(self.width() - w, 0, w, h)
+        if not hasattr(self, '_open_anim'):
+            self._open_anim = QPropertyAnimation(self.swipe_container, b"geometry")
+            self._open_anim.setDuration(160)
+
         self.swipe_container.show()
         self.swipe_container.raise_()
+        self._open_anim.stop()
+        self._open_anim.setStartValue(QRect(self.width(), 0, w, h))
+        self._open_anim.setEndValue(QRect(self.width() - w, 0, w, h))
+        self._open_anim.start()
 
     def close_swipe(self):
-        self.swipe_container.hide()
+        if not hasattr(self, 'swipe_container') or not self.swipe_container.isVisible():
+            return
+        w = 98
+        h = self.height()
+        if not hasattr(self, '_close_anim'):
+            self._close_anim = QPropertyAnimation(self.swipe_container, b"geometry")
+            self._close_anim.setDuration(120)
+            self._close_anim.finished.connect(self._on_close_anim_finished)
+
+        self._close_anim.stop()
+        self._close_anim.setStartValue(QRect(self.width() - w, 0, w, h))
+        self._close_anim.setEndValue(QRect(self.width(), 0, w, h))
+        self._close_anim.start()
+
+    def _on_close_anim_finished(self):
+        if hasattr(self, 'swipe_container'):
+            self.swipe_container.hide()
 
     def _on_swipe_solo_clicked(self):
         self.close_swipe()

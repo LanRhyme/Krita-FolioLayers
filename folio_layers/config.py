@@ -50,6 +50,14 @@ class LayerDockerConfig:
     def enable_hover_preview(self, val: bool):
         self.settings.setValue("enable_hover_preview", bool(val))
 
+    @property
+    def solo_shortcut(self) -> str:
+        return str(self.settings.value("solo_shortcut", "Ctrl+Click"))
+
+    @solo_shortcut.setter
+    def solo_shortcut(self, val: str):
+        self.settings.setValue("solo_shortcut", str(val))
+
 config_instance = LayerDockerConfig()
 
 def get_config():

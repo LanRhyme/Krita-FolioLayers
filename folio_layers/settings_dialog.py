@@ -16,7 +16,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Folio Layers 设置")
-        self.setFixedSize(320, 260)
+        self.setFixedSize(320, 310)
 
         t = get_theme()
         self.setStyleSheet(f"""
@@ -93,12 +93,28 @@ class SettingsDialog(QDialog):
         row2.addWidget(self.combo_detail, 1)
         layout.addLayout(row2)
 
-        # 3. 网格图棋盘格透明显示
+        # 3. 独显触发快捷键
+        row3 = QHBoxLayout()
+        row3.addWidget(QLabel("独显眼睛按钮快捷键:"))
+        self.combo_solo = QComboBox()
+        shortcuts = [
+            ("Ctrl + Click (默认)", "Ctrl+Click"),
+            ("Alt + Click", "Alt+Click"),
+            ("Shift + Click", "Shift+Click"),
+        ]
+        for label, val in shortcuts:
+            self.combo_solo.addItem(label, val)
+            if val == cfg.solo_shortcut:
+                self.combo_solo.setCurrentIndex(self.combo_solo.count() - 1)
+        row3.addWidget(self.combo_solo, 1)
+        layout.addLayout(row3)
+
+        # 4. 网格图棋盘格透明显示
         self.check_grid = QCheckBox("图层透明区域显示网格图(棋盘格)")
         self.check_grid.setChecked(cfg.use_checkerboard)
         layout.addWidget(self.check_grid)
 
-        # 4. 启用悬停浮窗预览
+        # 5. 启用悬停浮窗预览
         self.check_hover = QCheckBox("启用鼠标悬停大图浮窗预览")
         self.check_hover.setChecked(cfg.enable_hover_preview)
         layout.addWidget(self.check_hover)
@@ -124,6 +140,7 @@ class SettingsDialog(QDialog):
         cfg = get_config()
         cfg.thumb_size = self.combo_size.currentData()
         cfg.detail_level = self.combo_detail.currentData()
+        cfg.solo_shortcut = self.combo_solo.currentData()
         cfg.use_checkerboard = self.check_grid.isChecked()
         cfg.enable_hover_preview = self.check_hover.isChecked()
         self.accept()

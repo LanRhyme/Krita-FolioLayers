@@ -237,8 +237,22 @@ class LayerTreeWidget(QTreeWidget):
         self._clear_drag_indicator()
         super().dragLeaveEvent(event)
 
+    def _close_all_swipes(self):
+        for i in range(self.topLevelItemCount()):
+            self._close_item_swipe_recursive(self.topLevelItem(i))
+
+    def _close_item_swipe_recursive(self, item):
+        if not item:
+            return
+        w = self.itemWidget(item, 0)
+        if w and hasattr(w, 'close_swipe'):
+            w.close_swipe()
+        for i in range(item.childCount()):
+            self._close_item_swipe_recursive(item.child(i))
+
     def mousePressEvent(self, event):
-        """记录点击起点，并在点击空白区域时不取消选中"""
+        """记录点击起点，关闭其他划出的面板，并在点击空白区域时不取消选中"""
+        self._close_all_swipes()
         item = self.itemAt(event.pos())
         if item is None:
             return
@@ -949,19 +963,24 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             self.disable_solo()
 
         self._solo_backup = {}
+        self._solo_raw_mode = True
         def backup_and_solo(n):
             uid = str(n.uniqueId())
             vis = n.visible()
             op = n.opacity() if hasattr(n, 'opacity') else 255
             bm = n.blendingMode() if hasattr(n, 'blendingMode') else "normal"
-            self._solo_backup[uid] = (vis, op, bm)
+            ialpha = n.inheritAlpha() if hasattr(n, 'inheritAlpha') else False
+            self._solo_backup[uid] = (vis, op, bm, ialpha)
 
             if uid == target_uid:
                 n.setVisible(True)
+                # 独显默认启用纯净原色模式：100% 不透明度 + Normal 混合模式 + 关闭继承透明度 (防止隐藏下方图层后消失)
                 if hasattr(n, 'setOpacity'):
                     n.setOpacity(255)
                 if hasattr(n, 'setBlendingMode'):
                     n.setBlendingMode("normal")
+                if hasattr(n, 'setInheritAlpha'):
+                    n.setInheritAlpha(False)
             else:
                 n.setVisible(False)
 
@@ -974,6 +993,38 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self.refresh_canvas()
         self.refresh_tree()
 
+    def toggle_solo_raw_mode(self):
+        """独显模式下在 纯净原色模式 (100%不透明/Normal) 与 原图层效果 (原不透明度/混合模式) 之间一键切换"""
+        if not IN_KRITA or not getattr(self, '_solo_node_uid', None):
+            return
+        doc = Krita.instance().activeDocument()
+        if not doc:
+            return
+        node = doc.activeNode()
+        if not node or str(node.uniqueId()) != self._solo_node_uid:
+            return
+
+        target_uid = self._solo_node_uid
+        if target_uid not in getattr(self, '_solo_backup', {}):
+            return
+
+        self._solo_raw_mode = not getattr(self, '_solo_raw_mode', True)
+        vis, orig_op, orig_bm, orig_ialpha = self._solo_backup[target_uid]
+
+        if self._solo_raw_mode:
+            # 切换为纯净原色
+            if hasattr(node, 'setOpacity'): node.setOpacity(255)
+            if hasattr(node, 'setBlendingMode'): node.setBlendingMode("normal")
+            if hasattr(node, 'setInheritAlpha'): node.setInheritAlpha(False)
+        else:
+            # 切换为原图层效果
+            if hasattr(node, 'setOpacity'): node.setOpacity(orig_op)
+            if hasattr(node, 'setBlendingMode'): node.setBlendingMode(orig_bm)
+            if hasattr(node, 'setInheritAlpha'): node.setInheritAlpha(orig_ialpha)
+
+        self.refresh_canvas()
+        self.refresh_tree()
+
     def disable_solo(self):
         if not IN_KRITA or not getattr(self, '_solo_node_uid', None):
             return
@@ -982,18 +1033,21 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             def restore_node(n):
                 uid = str(n.uniqueId())
                 if uid in self._solo_backup:
-                    vis, op, bm = self._solo_backup[uid]
+                    vis, op, bm, ialpha = self._solo_backup[uid]
                     n.setVisible(vis)
                     if hasattr(n, 'setOpacity'):
                         n.setOpacity(op)
                     if hasattr(n, 'setBlendingMode'):
                         n.setBlendingMode(bm)
+                    if hasattr(n, 'setInheritAlpha'):
+                        n.setInheritAlpha(ialpha)
                 for child in list(n.childNodes()):
                     restore_node(child)
 
             restore_node(doc.rootNode())
 
         self._solo_node_uid = None
+        self._solo_raw_mode = True
         self._solo_backup = {}
         self.refresh_canvas()
         self.refresh_tree()
