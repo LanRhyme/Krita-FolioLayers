@@ -45,6 +45,12 @@ class LayerRowWidget(QWidget):
         self.docker = docker
         self.setObjectName("LayerRowWidget")
 
+        # 缩略图懒加载：避免建树时同步阻塞，延迟到事件循环空闲时加载
+        self._thumb_timer = QTimer(self)
+        self._thumb_timer.setSingleShot(True)
+        self._thumb_timer.setInterval(80)
+        self._thumb_timer.timeout.connect(self._load_thumbnail)
+
         cfg = get_config()
         t = get_theme()
         self.has_ample_space = (cfg.thumb_size >= 20)
