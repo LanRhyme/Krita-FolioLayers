@@ -2,7 +2,7 @@
 """Flexible Layer Row Widget with Opacity & Blending Text (Official Layout Style)"""
 
 from .qt_compat import (
-    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QLineEdit,
+    QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QPushButton, QLineEdit,
     Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent,
     QPainter, QApplication, QPen
 )
