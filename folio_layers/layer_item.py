@@ -254,17 +254,18 @@ class LayerRowWidget(QWidget):
 
         ntype = self.node.type()
         type_info = get_layer_type_info(ntype)
-        is_group = (ntype == "grouplayer")
+        # 检查是否有子节点（包含图层组及挂载了蒙版的图层）
+        try:
+            has_children = (is_group or len(self.node.childNodes()) > 0)
+        except Exception:
+            has_children = is_group
 
-        # 获取可见性
-        vis = self.node.visible()
-        expanded = self.tree_item.isExpanded() if is_group else False
+        expanded = self.tree_item.isExpanded() if has_children else False
 
-        # 图层组视觉强化: 加粗标题 + 显示子图层数量 + 强化图标
+        # 图层组视觉强化: 加粗标题 + 显示子图层数量
         if is_group:
             try:
-                child_nodes = [c for c in self.node.childNodes() if c.type() != "selectionmask"]
-                child_cnt = len(child_nodes)
+                child_cnt = len(self.node.childNodes())
             except Exception:
                 child_cnt = 0
             self.name_label.setText(f"{self.node.name()} ({child_cnt})")
@@ -284,8 +285,8 @@ class LayerRowWidget(QWidget):
             icon_color = t.TEXT_MUTED if not vis else (t.ACCENT if is_group else t.TEXT_MAIN)
             self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], icon_color, 14))
 
-        self.expand_btn.setVisible(is_group)
-        if is_group:
+        self.expand_btn.setVisible(has_children)
+        if has_children:
             self.expand_btn.setIcon(get_lucide_icon("chevron-down" if expanded else "chevron-right", t.TEXT_MAIN if vis else t.TEXT_MUTED, 12))
 
         # 颜色标记线

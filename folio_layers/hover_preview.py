@@ -21,6 +21,11 @@ def get_layer_type_info(ntype):
         "filllayer": ("填充图层", t.ACCENT, "palette"),
         "clonelayer": ("克隆图层", t.TEXT_MUTED, "copy"),
         "filelayer": ("文件图层", t.TEXT_MUTED, "layers"),
+        "transparencymask": ("透明度蒙版", t.ACCENT, "eye-off"),
+        "filtermask": ("滤镜蒙版", t.ACCENT, "wand-2"),
+        "transformmask": ("变换蒙版", t.ACCENT, "move"),
+        "colorizemask": ("着色蒙版", t.ACCENT, "palette"),
+        "selectionmask": ("选区蒙版", t.ACCENT, "box"),
     }
     return mapping.get(ntype, ("图层", t.TEXT_MUTED, "layers"))
 

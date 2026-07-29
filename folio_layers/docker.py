@@ -609,7 +609,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
     def _sync_node_tree(self, parent_node, parent_tree_item, active_node):
         from .layer_item import LayerRowWidget
         children = parent_node.childNodes()
-        target_nodes = [c for c in reversed(children) if c.type() != "selectionmask"]
+        target_nodes = list(reversed(children))
         
         current_items = []
         if parent_tree_item:
@@ -670,7 +670,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             if active_node and node.uniqueId() == active_node.uniqueId():
                 self.tree.setCurrentItem(item)
                 
-            if node.type() == "grouplayer":
+            if len(node.childNodes()) > 0:
                 self._sync_node_tree(node, item, active_node)
                 
         for uid, item in item_map.items():
