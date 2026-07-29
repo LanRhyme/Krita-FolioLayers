@@ -166,7 +166,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self.setWindowTitle("Lucide 图层")
         self.canvas = None
 
-        self.hover_preview = HoverPreviewPopup(self)
+        self.hover_preview = HoverPreviewPopup(None)
         self.hover_preview.hide()
         # 悬停预览状态跟踪：首次停留需要延迟，之后移动到其它项就立即显示
         self._hover_active = False  # True 表示浮窗已在展示过
