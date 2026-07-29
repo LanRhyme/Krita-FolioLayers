@@ -699,8 +699,22 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self.opacity_bar.setValue(op_val)
         self.opacity_bar.blockSignals(False)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if hasattr(self, 'sync_timer') and not self.sync_timer.isActive():
+            self.sync_timer.start()
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        if hasattr(self, 'sync_timer') and self.sync_timer.isActive():
+            self.sync_timer.stop()
+
     def _sync_with_krita(self):
         if not IN_KRITA or self._updating_ui or self._loading:
+            return
+        buttons = QApplication.mouseButtons()
+        no_btn = getattr(Qt, 'NoButton', getattr(getattr(Qt, 'MouseButton', None), 'NoButton', 0))
+        if buttons != no_btn:
             return
         doc = Krita.instance().activeDocument()
         if not doc:

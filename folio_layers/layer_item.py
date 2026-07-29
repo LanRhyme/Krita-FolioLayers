@@ -379,6 +379,11 @@ class LayerRowWidget(QWidget):
         # 折叠组内的子项不加载缩略图，等展开时再加载
         if not self._is_tree_visible():
             return
+        buttons = QApplication.mouseButtons()
+        no_btn = getattr(Qt, 'NoButton', getattr(getattr(Qt, 'MouseButton', None), 'NoButton', 0))
+        if buttons != no_btn:
+            self._thumb_timer.start(500)
+            return
         try:
             cfg = get_config()
             ts = cfg.thumb_size
