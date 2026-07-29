@@ -45,6 +45,14 @@ class LayerTreeWidget(QTreeWidget):
         self._hover_timer.setSingleShot(True)
         self._hover_timer.timeout.connect(self._on_hover_timeout)
 
+        # 拖拽边缘自动平滑滚动
+        self.setAutoScroll(True)
+        self.setAutoScrollMargin(35)
+        self._scroll_dir = 0
+        self._auto_scroll_timer = QTimer(self)
+        self._auto_scroll_timer.setInterval(25)
+        self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
+
     def eventFilter(self, obj, event):
         if obj == self.viewport():
             ev_type = event.type()
@@ -91,6 +99,38 @@ class LayerTreeWidget(QTreeWidget):
         if w and w.node:
             self.docker.show_hover_preview(w.node, QCursor.pos())
 
+    def _do_auto_scroll(self):
+        if self._scroll_dir == 0:
+            return
+        vbar = self.verticalScrollBar()
+        if vbar:
+            step = 12 if self._scroll_dir > 0 else -12
+            vbar.setValue(vbar.value() + step)
+
+    def dragMoveEvent(self, event):
+        super().dragMoveEvent(event)
+        margin = 35
+        vp = self.viewport()
+        pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
+        y = pos.y()
+
+        if y < margin:
+            self._scroll_dir = -1
+            if not self._auto_scroll_timer.isActive():
+                self._auto_scroll_timer.start()
+        elif vp.height() - y < margin:
+            self._scroll_dir = 1
+            if not self._auto_scroll_timer.isActive():
+                self._auto_scroll_timer.start()
+        else:
+            self._scroll_dir = 0
+            self._auto_scroll_timer.stop()
+
+    def dragLeaveEvent(self, event):
+        self._scroll_dir = 0
+        self._auto_scroll_timer.stop()
+        super().dragLeaveEvent(event)
+
     def mousePressEvent(self, event):
         """点击空白区域时不取消选中，始终保持至少选择一个图层"""
         item = self.itemAt(event.pos())
@@ -100,6 +140,8 @@ class LayerTreeWidget(QTreeWidget):
         super().mousePressEvent(event)
 
     def dropEvent(self, event):
+        self._scroll_dir = 0
+        self._auto_scroll_timer.stop()
         if hasattr(event, 'position'):
             pos = event.position().toPoint()
         else:
