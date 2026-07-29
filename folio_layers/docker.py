@@ -907,6 +907,72 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             if child_item.childCount() > 0 and child_item.isExpanded():
                 self._on_item_expanded(child_item)
 
+    # ====== 独显模式 (Solo Mode) ======
+    def enable_solo(self, node):
+        if not IN_KRITA or not node:
+            return
+        doc = Krita.instance().activeDocument()
+        if not doc:
+            return
+
+        target_uid = str(node.uniqueId())
+        if getattr(self, '_solo_node_uid', None) == target_uid:
+            self.disable_solo()
+            return
+
+        if getattr(self, '_solo_node_uid', None):
+            self.disable_solo()
+
+        self._solo_backup = {}
+        def backup_and_solo(n):
+            uid = str(n.uniqueId())
+            vis = n.visible()
+            op = n.opacity() if hasattr(n, 'opacity') else 255
+            bm = n.blendingMode() if hasattr(n, 'blendingMode') else "normal"
+            self._solo_backup[uid] = (vis, op, bm)
+
+            if uid == target_uid:
+                n.setVisible(True)
+                if hasattr(n, 'setOpacity'):
+                    n.setOpacity(255)
+                if hasattr(n, 'setBlendingMode'):
+                    n.setBlendingMode("normal")
+            else:
+                n.setVisible(False)
+
+            for child in list(n.childNodes()):
+                backup_and_solo(child)
+
+        backup_and_solo(doc.rootNode())
+        self._solo_node_uid = target_uid
+        doc.setActiveNode(node)
+        self.refresh_canvas()
+        self.refresh_tree()
+
+    def disable_solo(self):
+        if not IN_KRITA or not getattr(self, '_solo_node_uid', None):
+            return
+        doc = Krita.instance().activeDocument()
+        if doc and getattr(self, '_solo_backup', None):
+            def restore_node(n):
+                uid = str(n.uniqueId())
+                if uid in self._solo_backup:
+                    vis, op, bm = self._solo_backup[uid]
+                    n.setVisible(vis)
+                    if hasattr(n, 'setOpacity'):
+                        n.setOpacity(op)
+                    if hasattr(n, 'setBlendingMode'):
+                        n.setBlendingMode(bm)
+                for child in list(n.childNodes()):
+                    restore_node(child)
+
+            restore_node(doc.rootNode())
+
+        self._solo_node_uid = None
+        self._solo_backup = {}
+        self.refresh_canvas()
+        self.refresh_tree()
+
     def _on_tree_selection_changed(self):
         if self._updating_ui or not IN_KRITA:
             return
@@ -915,6 +981,11 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             item = selected_items[0]
             row_widget = self.tree.itemWidget(item, 0)
             if row_widget and row_widget.node:
+                # 处于独显模式时，选中其他图层自动取消独显
+                solo_uid = getattr(self, '_solo_node_uid', None)
+                if solo_uid and str(row_widget.node.uniqueId()) != solo_uid:
+                    self.disable_solo()
+                    return
                 doc = Krita.instance().activeDocument()
                 if doc and doc.activeNode() != row_widget.node:
                     doc.setActiveNode(row_widget.node)

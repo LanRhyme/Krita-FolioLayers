@@ -184,6 +184,48 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
+        # 建立滑动面板容器（左划弹出的独显与删除按钮）
+        self.swipe_container = QWidget(self)
+        self.swipe_container.setFixedHeight(row_h)
+        self.swipe_container.setStyleSheet(f"background: {t.BG_BASE}; border-radius: 2px;")
+        s_layout = QHBoxLayout(self.swipe_container)
+        s_layout.setContentsMargins(1, 1, 1, 1)
+        s_layout.setSpacing(2)
+
+        self.btn_swipe_solo = QPushButton("独显", self.swipe_container)
+        self.btn_swipe_solo.setFixedSize(45, max(18, row_h - 2))
+        self.btn_swipe_solo.setToolTip("独显当前图层 (重置 100% 不透明度与 Normal 模式便于纯净取色)")
+        self.btn_swipe_solo.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {t.ACCENT};
+                color: #ffffff;
+                border: none;
+                border-radius: 2px;
+                font-size: 11px;
+                font-weight: bold;
+            }}
+        """)
+        self.btn_swipe_solo.clicked.connect(self._on_swipe_solo_clicked)
+
+        self.btn_swipe_del = QPushButton("删除", self.swipe_container)
+        self.btn_swipe_del.setFixedSize(45, max(18, row_h - 2))
+        self.btn_swipe_del.setToolTip("删除当前图层")
+        self.btn_swipe_del.setStyleSheet("""
+            QPushButton {
+                background-color: #e54d42;
+                color: #ffffff;
+                border: none;
+                border-radius: 2px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+        """)
+        self.btn_swipe_del.clicked.connect(self._on_swipe_del_clicked)
+
+        s_layout.addWidget(self.btn_swipe_solo)
+        s_layout.addWidget(self.btn_swipe_del)
+        self.swipe_container.hide()
+
         self._init_native_styles()
 
         self.refresh_state()
@@ -267,17 +309,28 @@ class LayerRowWidget(QWidget):
 
         expanded = self.tree_item.isExpanded() if has_children else False
 
+        solo_uid = getattr(self.docker, '_solo_node_uid', None)
+        is_soloed = (solo_uid and str(self.node.uniqueId()) == solo_uid)
+        is_suppressed = (solo_uid and not is_soloed)
+
+        if is_suppressed:
+            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: transparent; opacity: 0.35; color: {t.TEXT_MUTED}; }}")
+        elif is_soloed:
+            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: rgba({t.ACCENT_RGB}, 0.22); border: 1px solid {t.ACCENT}; border-radius: 3px; }}")
+        else:
+            self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; border: none; }")
+
         # 图层组视觉强化: 加粗标题 + 显示子图层数量
         if is_group:
             try:
                 child_cnt = len(self.node.childNodes())
             except Exception:
                 child_cnt = 0
-            self.name_label.setText(f"{self.node.name()} ({child_cnt})")
-            self.name_label.setStyleSheet(f"color: {t.TEXT_MAIN if vis else t.TEXT_MUTED}; font-weight: 600;")
+            self.name_label.setText(f"{self.node.name()} ({child_cnt})" + (" [独显]" if is_soloed else ""))
+            self.name_label.setStyleSheet(f"color: {t.ACCENT if is_soloed else (t.TEXT_MAIN if vis else t.TEXT_MUTED)}; font-weight: 600;")
         else:
-            self.name_label.setText(self.node.name())
-            self.name_label.setStyleSheet(f"color: {t.TEXT_MAIN if vis else t.TEXT_MUTED}; font-weight: normal;")
+            self.name_label.setText(self.node.name() + (" [独显]" if is_soloed else ""))
+            self.name_label.setStyleSheet(f"color: {t.ACCENT if is_soloed else (t.TEXT_MAIN if vis else t.TEXT_MUTED)}; font-weight: {'bold' if is_soloed else 'normal'};")
 
         # 界面元素显隐
         show_type_icon = (level in (DETAIL_BALANCED, DETAIL_DETAILED))
@@ -521,3 +574,43 @@ class LayerRowWidget(QWidget):
             self.name_edit.hide()
             self.name_label.show()
             self.refresh_state()
+
+    # ====== 滑动手势与独显交互 ======
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._drag_start_pos = event.pos()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if getattr(self, '_drag_start_pos', None) and (event.buttons() & Qt.MouseButton.LeftButton):
+            dx = event.pos().x() - self._drag_start_pos.x()
+            dy = event.pos().y() - self._drag_start_pos.y()
+            if dx < -30 and abs(dy) < 20:
+                self.open_swipe()
+            elif dx > 30 and abs(dy) < 20:
+                self.close_swipe()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_start_pos = None
+        super().mouseReleaseEvent(event)
+
+    def open_swipe(self):
+        w = 98
+        h = self.height()
+        self.swipe_container.setGeometry(self.width() - w, 0, w, h)
+        self.swipe_container.show()
+        self.swipe_container.raise_()
+
+    def close_swipe(self):
+        self.swipe_container.hide()
+
+    def _on_swipe_solo_clicked(self):
+        self.close_swipe()
+        if self.docker and hasattr(self.docker, 'enable_solo'):
+            self.docker.enable_solo(self.node)
+
+    def _on_swipe_del_clicked(self):
+        self.close_swipe()
+        if self.docker and hasattr(self.docker, '_delete_layer'):
+            self.docker._delete_layer()
