@@ -61,15 +61,25 @@ class LayerTreeWidget(QTreeWidget):
                             self.docker.hover_preview.popup_at(QCursor.pos())
                     else:
                         self._hover_item = item
-                        self.docker.hover_preview.hide()
                         if item:
-                            self._hover_timer.start(3000)
+                            w = self.itemWidget(item, 0)
+                            if w and w.node:
+                                if self.docker.hover_preview.isVisible() or getattr(self.docker, '_hover_active', False):
+                                    # 处于预览激活状态，从一个图层移动到另一个图层瞬间无缝切换！
+                                    self.docker.show_hover_preview(w.node, QCursor.pos())
+                                else:
+                                    # 首次悬停，1000ms (1秒) 后弹出
+                                    self._hover_timer.start(1000)
+                            else:
+                                self._hover_timer.stop()
+                                self.docker.reset_hover_state()
                         else:
                             self._hover_timer.stop()
+                            self.docker.reset_hover_state()
             elif ev_type == ev_leave:
                 self._hover_timer.stop()
                 self._hover_item = None
-                self.docker.hover_preview.hide()
+                self.docker.reset_hover_state()
         return super().eventFilter(obj, event)
 
     def _on_hover_timeout(self):
