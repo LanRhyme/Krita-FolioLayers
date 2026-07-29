@@ -307,9 +307,13 @@ class LayerTreeWidget(QTreeWidget):
                     _reattach_subtree(child, sub_backup)
 
         def _reorder_with_children(drag_node, new_parent, above_sibling):
-            # Krita 官方规则：如果被拖拽图层处于锁定状态 (locked)，保留原图层，在目标位置克隆副本
+            # Krita 官方规则：如果被拖拽图层处于锁定状态 (locked)，保留原图层，在目标位置克隆副本（带 - 副本 后缀）
             if drag_node.locked():
                 cloned_node = drag_node.duplicate()
+                try:
+                    cloned_node.setName(f"{drag_node.name()} - 副本")
+                except Exception:
+                    pass
                 try:
                     cloned_node.setLocked(False)
                 except Exception:
@@ -1050,6 +1054,10 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if doc and doc.activeNode():
             node = doc.activeNode()
             dup = node.duplicate()
+            try:
+                dup.setName(f"{node.name()} - 副本")
+            except Exception:
+                pass
             parent = node.parentNode() or doc.rootNode()
             parent.addChildNode(dup, node)
             doc.setActiveNode(dup)
