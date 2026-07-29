@@ -238,12 +238,37 @@ class LayerTreeWidget(QTreeWidget):
         super().dragLeaveEvent(event)
 
     def mousePressEvent(self, event):
-        """点击空白区域时不取消选中，始终保持至少选择一个图层"""
+        """记录点击起点，并在点击空白区域时不取消选中"""
         item = self.itemAt(event.pos())
         if item is None:
-            # 点到空白处：吃掉事件，不传递给父类（防止取消选中）
             return
+        self._press_pos = event.pos()
+        self._is_horizontal_swipe = False
         super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
+        if getattr(self, '_press_pos', None) and (event.buttons() & Qt.MouseButton.LeftButton):
+            dx = pos.x() - self._press_pos.x()
+            dy = pos.y() - self._press_pos.y()
+            # 左划手势判断：水平位移明显大于垂直位移，且 dx < -15px
+            if dx < -15 and abs(dx) > abs(dy) * 1.2:
+                self._is_horizontal_swipe = True
+                item = self.itemAt(self._press_pos)
+                if item:
+                    w = self.itemWidget(item, 0)
+                    if w and hasattr(w, 'open_swipe'):
+                        w.open_swipe()
+                # 吃掉事件，截断 Qt C++ 原生 QDrag 的拖拽启动
+                return
+            elif dx > 15 and getattr(self, '_is_horizontal_swipe', False):
+                item = self.itemAt(self._press_pos)
+                if item:
+                    w = self.itemWidget(item, 0)
+                    if w and hasattr(w, 'close_swipe'):
+                        w.close_swipe()
+                return
+        super().mouseMoveEvent(event)
 
     def dropEvent(self, event):
         self._scroll_dir = 0

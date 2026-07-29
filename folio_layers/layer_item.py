@@ -515,9 +515,18 @@ class LayerRowWidget(QWidget):
         else:
             self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; border: none; }")
 
-    # ====== 事件交互 ======
     def _toggle_visibility(self):
         if self.node:
+            # 按住 Alt 键点击眼睛图标：快捷开启/关闭独显模式
+            modifiers = QApplication.keyboardModifiers()
+            if modifiers & Qt.KeyboardModifier.AltModifier:
+                if self.docker and hasattr(self.docker, 'enable_solo'):
+                    self.docker.enable_solo(self.node)
+                    return
+            solo_uid = getattr(self.docker, '_solo_node_uid', None)
+            if solo_uid and str(self.node.uniqueId()) == solo_uid:
+                self.docker.disable_solo()
+                return
             new_vis = not self.node.visible()
             self.node.setVisible(new_vis)
             self.docker.refresh_canvas()
