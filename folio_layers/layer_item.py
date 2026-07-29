@@ -472,13 +472,14 @@ class LayerRowWidget(QWidget):
             if self.node:
                 self.docker.show_hover_preview(self.node, QCursor.pos())
         else:
-            # 首次停留，延迟 5000ms (5秒) 后才弹出
-            self.hover_timer.setInterval(5000)
+            # 首次停留，延迟 3000ms (3秒) 后才弹出
+            self.hover_timer.setInterval(3000)
             self.hover_timer.start()
 
     def leaveEvent(self, event):
         super().leaveEvent(event)
-        if not self.underMouse():
+        pos = QCursor.pos()
+        if not self.rect().contains(self.mapFromGlobal(pos)):
             self.hover_timer.stop()
             # 移开图层项时隐藏浮窗
             self.docker.hover_preview.hide()
@@ -490,5 +491,6 @@ class LayerRowWidget(QWidget):
 
     def _on_hover_timeout(self):
         cfg = get_config()
-        if cfg.enable_hover_preview and self.underMouse() and self.node:
-            self.docker.show_hover_preview(self.node, QCursor.pos())
+        pos = QCursor.pos()
+        if cfg.enable_hover_preview and self.node and self.rect().contains(self.mapFromGlobal(pos)):
+            self.docker.show_hover_preview(self.node, pos)

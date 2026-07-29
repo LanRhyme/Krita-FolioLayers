@@ -4,7 +4,7 @@
 try:
     from PyQt6.QtCore import (
         Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QRect, QEvent, QTimer, QByteArray,
-        QMimeData, QSettings
+        QMimeData, QSettings, QPropertyAnimation, QEasingCurve
     )
     from PyQt6.QtGui import (
         QPainter, QColor, QFont, QPen, QBrush, QIcon, QPixmap, QImage, QCursor, QDrag,
@@ -49,7 +49,7 @@ try:
 except ImportError:
     from PyQt5.QtCore import (
         Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QRect, QEvent, QTimer, QByteArray,
-        QMimeData, QSettings
+        QMimeData, QSettings, QPropertyAnimation, QEasingCurve
     )
     from PyQt5.QtGui import (
         QPainter, QColor, QFont, QPen, QBrush, QIcon, QPixmap, QImage, QCursor, QDrag,

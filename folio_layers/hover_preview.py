@@ -3,7 +3,8 @@
 
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, Qt, QPixmap, QColor,
-    QFont, QGraphicsDropShadowEffect, QSize, QRect, QApplication
+    QFont, QGraphicsDropShadowEffect, QSize, QRect, QApplication,
+    QGraphicsOpacityEffect, QPropertyAnimation, QEasingCurve
 )
 from .lucide_icons import get_lucide_pixmap
 from .theme import get_theme, create_projection_thumbnail
@@ -247,6 +248,18 @@ class HoverPreviewPopup(QFrame):
             self.move(x, y)
         else:
             self.move(global_pos.x() + 12, global_pos.y())
+
+        # 平滑淡入动画
+        effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(effect)
+        
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(220)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(getattr(QEasingCurve, 'OutCubic', getattr(getattr(QEasingCurve, 'Type', None), 'OutCubic', 0)))
+        anim.start()
+        self._fade_anim = anim
 
         self.show()
         self.raise_()
