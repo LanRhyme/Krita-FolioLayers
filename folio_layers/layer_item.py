@@ -22,10 +22,6 @@ class LayerRowWidget(QWidget):
         self.node = node
         self.tree_item = tree_item
         self.docker = docker
-        self.hover_timer = QTimer(self)
-        self.hover_timer.setSingleShot(True)
-        self.hover_timer.setInterval(300)
-        self.hover_timer.timeout.connect(self._on_hover_timeout)
 
         # 缩略图懒加载：避免建树时同步阻塞，延迟到事件循环空闲时加载
         self._thumb_timer = QTimer(self)
