@@ -4,7 +4,7 @@
 from .qt_compat import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QLineEdit,
     Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent,
-    QPainter, QApplication
+    QPainter, QApplication, QPen
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap
 from .hover_preview import get_layer_type_info, COLOR_LABEL_MAP
@@ -13,6 +13,33 @@ from .config import (
     get_config, DETAIL_NONE, DETAIL_COMPACT, DETAIL_BALANCED, DETAIL_DETAILED
 )
 from .blending_modes import get_blending_mode_name
+
+class IndentGuideWidget(QWidget):
+    """绘制多层图层嵌套的深层导轨连线"""
+    def __init__(self, depth, step=16, parent=None):
+        super().__init__(parent)
+        self.depth = depth
+        self.step = step
+        self.setFixedWidth(step * depth)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.depth <= 0:
+            return
+        t = get_theme()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        
+        pen = QPen(QColor(t.BORDER))
+        pen.setWidth(1)
+        pen.setStyle(Qt.PenStyle.DotLine)
+        p.setPen(pen)
+
+        h = self.height()
+        for d in range(self.depth):
+            x = d * self.step + (self.step // 2)
+            p.drawLine(x, 0, x, h)
+        p.end()
 
 class LayerRowWidget(QWidget):
     """自适应图层列表项 Widget (与官方一致的两行/单行布局)"""
@@ -67,11 +94,10 @@ class LayerRowWidget(QWidget):
         self.color_bar.setFixedHeight(max(12, row_h - 6))
         layout.addWidget(self.color_bar)
 
-        # 1.5 内部层级缩进，替代 QTreeWidget 的原生缩进，保证左侧对齐
+        # 1.5 内部层级缩进导轨线，极简直观的深层连线效果
         depth = self.get_depth()
         if depth > 0:
-            self.indent_spacer = QWidget()
-            self.indent_spacer.setFixedSize(14 * depth, 1)
+            self.indent_spacer = IndentGuideWidget(depth, step=16)
             layout.addWidget(self.indent_spacer)
 
         # 2. 折叠/展开按钮（图层组专用）
@@ -225,14 +251,26 @@ class LayerRowWidget(QWidget):
         cfg = get_config()
         level = cfg.detail_level
 
-        self.name_label.setText(self.node.name())
-
         ntype = self.node.type()
         type_info = get_layer_type_info(ntype)
         is_group = (ntype == "grouplayer")
 
         # 获取可见性
         vis = self.node.visible()
+        expanded = self.tree_item.isExpanded() if is_group else False
+
+        # 图层组视觉强化: 加粗标题 + 显示子图层数量 + 强化图标
+        if is_group:
+            try:
+                child_nodes = [c for c in self.node.childNodes() if c.type() != "selectionmask"]
+                child_cnt = len(child_nodes)
+            except Exception:
+                child_cnt = 0
+            self.name_label.setText(f"{self.node.name()} ({child_cnt})")
+            self.name_label.setStyleSheet(f"color: {t.TEXT_MAIN if vis else t.TEXT_MUTED}; font-weight: 600;")
+        else:
+            self.name_label.setText(self.node.name())
+            self.name_label.setStyleSheet(f"color: {t.TEXT_MAIN if vis else t.TEXT_MUTED}; font-weight: normal;")
 
         # 界面元素显隐
         show_type_icon = (level in (DETAIL_BALANCED, DETAIL_DETAILED))
@@ -242,13 +280,17 @@ class LayerRowWidget(QWidget):
 
         self.type_icon.setVisible(show_type_icon)
         if show_type_icon:
-            icon_color = t.TEXT_MUTED if not vis else (t.ACCENT if is_group else t.TEXT_MAIN)
-            self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], icon_color, 14))
+            if is_group:
+                group_icon = "folder-open" if expanded else "folder"
+                icon_color = t.ACCENT if vis else t.TEXT_MUTED
+                self.type_icon.setPixmap(get_lucide_pixmap(group_icon, icon_color, 14))
+            else:
+                icon_color = t.TEXT_MUTED if not vis else t.TEXT_MAIN
+                self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], icon_color, 14))
 
         self.expand_btn.setVisible(is_group)
         if is_group:
-            expanded = self.tree_item.isExpanded()
-            self.expand_btn.setIcon(get_lucide_icon("chevron-down" if expanded else "chevron-right", t.TEXT_MUTED, 12))
+            self.expand_btn.setIcon(get_lucide_icon("chevron-down" if expanded else "chevron-right", t.TEXT_MAIN if vis else t.TEXT_MUTED, 12))
 
         # 颜色标记线
         try:
