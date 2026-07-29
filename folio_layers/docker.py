@@ -962,8 +962,26 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if getattr(self, '_solo_node_uid', None):
             self.disable_solo()
 
+        # 1. 收集目标节点的所有祖先节点 UID (保证全路径父图层组 visible = True)
+        ancestor_uids = set()
+        curr = node
+        while curr:
+            ancestor_uids.add(str(curr.uniqueId()))
+            curr = curr.parentNode()
+
+        # 2. 收集目标节点的所有后代节点 UID (如果目标是图层组，子节点也保持 visible = True)
+        descendant_uids = set()
+        def collect_descendants(n):
+            descendant_uids.add(str(n.uniqueId()))
+            for c in list(n.childNodes()):
+                collect_descendants(c)
+        collect_descendants(node)
+
+        keep_visible_uids = ancestor_uids.union(descendant_uids)
+
         self._solo_backup = {}
         self._solo_raw_mode = True
+
         def backup_and_solo(n):
             uid = str(n.uniqueId())
             vis = n.visible()
@@ -972,17 +990,19 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             ialpha = n.inheritAlpha() if hasattr(n, 'inheritAlpha') else False
             self._solo_backup[uid] = (vis, op, bm, ialpha)
 
-            if uid == target_uid:
+            if uid in keep_visible_uids:
                 n.setVisible(True)
-                # 独显默认启用纯净原色模式：100% 不透明度 + Normal 混合模式 + 关闭继承透明度 (防止隐藏下方图层后消失)
+            else:
+                n.setVisible(False)
+
+            if uid == target_uid:
+                # 独显默认启用纯净原色模式：100% 不透明度 + Normal 混合模式 + 关闭继承透明度
                 if hasattr(n, 'setOpacity'):
                     n.setOpacity(255)
                 if hasattr(n, 'setBlendingMode'):
                     n.setBlendingMode("normal")
                 if hasattr(n, 'setInheritAlpha'):
                     n.setInheritAlpha(False)
-            else:
-                n.setVisible(False)
 
             for child in list(n.childNodes()):
                 backup_and_solo(child)
@@ -1000,12 +1020,22 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         doc = Krita.instance().activeDocument()
         if not doc:
             return
-        node = doc.activeNode()
-        if not node or str(node.uniqueId()) != self._solo_node_uid:
-            return
 
         target_uid = self._solo_node_uid
         if target_uid not in getattr(self, '_solo_backup', {}):
+            return
+
+        target_node = None
+        def find_node(n):
+            nonlocal target_node
+            if str(n.uniqueId()) == target_uid:
+                target_node = n
+                return
+            for c in list(n.childNodes()):
+                find_node(c)
+
+        find_node(doc.rootNode())
+        if not target_node:
             return
 
         self._solo_raw_mode = not getattr(self, '_solo_raw_mode', True)
@@ -1013,14 +1043,14 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
         if self._solo_raw_mode:
             # 切换为纯净原色
-            if hasattr(node, 'setOpacity'): node.setOpacity(255)
-            if hasattr(node, 'setBlendingMode'): node.setBlendingMode("normal")
-            if hasattr(node, 'setInheritAlpha'): node.setInheritAlpha(False)
+            if hasattr(target_node, 'setOpacity'): target_node.setOpacity(255)
+            if hasattr(target_node, 'setBlendingMode'): target_node.setBlendingMode("normal")
+            if hasattr(target_node, 'setInheritAlpha'): target_node.setInheritAlpha(False)
         else:
             # 切换为原图层效果
-            if hasattr(node, 'setOpacity'): node.setOpacity(orig_op)
-            if hasattr(node, 'setBlendingMode'): node.setBlendingMode(orig_bm)
-            if hasattr(node, 'setInheritAlpha'): node.setInheritAlpha(orig_ialpha)
+            if hasattr(target_node, 'setOpacity'): target_node.setOpacity(orig_op)
+            if hasattr(target_node, 'setBlendingMode'): target_node.setBlendingMode(orig_bm)
+            if hasattr(target_node, 'setInheritAlpha'): target_node.setInheritAlpha(orig_ialpha)
 
         self.refresh_canvas()
         self.refresh_tree()

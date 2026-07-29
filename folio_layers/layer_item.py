@@ -313,6 +313,7 @@ class LayerRowWidget(QWidget):
         solo_uid = getattr(self.docker, '_solo_node_uid', None)
         is_soloed = (solo_uid and str(self.node.uniqueId()) == solo_uid)
         is_suppressed = (solo_uid and not is_soloed)
+        raw_mode = getattr(self.docker, '_solo_raw_mode', True)
 
         if is_suppressed:
             self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: transparent; opacity: 0.35; color: {t.TEXT_MUTED}; }}")
@@ -321,16 +322,18 @@ class LayerRowWidget(QWidget):
         else:
             self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; border: none; }")
 
+        solo_tag = (" [独显-纯净原色]" if raw_mode else " [独显-原效果]") if is_soloed else ""
+
         # 图层组视觉强化: 加粗标题 + 显示子图层数量
         if is_group:
             try:
                 child_cnt = len(self.node.childNodes())
             except Exception:
                 child_cnt = 0
-            self.name_label.setText(f"{self.node.name()} ({child_cnt})" + (" [独显]" if is_soloed else ""))
+            self.name_label.setText(f"{self.node.name()} ({child_cnt}){solo_tag}")
             self.name_label.setStyleSheet(f"color: {t.ACCENT if is_soloed else (t.TEXT_MAIN if vis else t.TEXT_MUTED)}; font-weight: 600;")
         else:
-            self.name_label.setText(self.node.name() + (" [独显]" if is_soloed else ""))
+            self.name_label.setText(f"{self.node.name()}{solo_tag}")
             self.name_label.setStyleSheet(f"color: {t.ACCENT if is_soloed else (t.TEXT_MAIN if vis else t.TEXT_MUTED)}; font-weight: {'bold' if is_soloed else 'normal'};")
 
         # 界面元素显隐
@@ -404,6 +407,18 @@ class LayerRowWidget(QWidget):
                 self.size_label.hide()
         else:
             self.size_label.hide()
+
+        # 独显模式专用右侧操作控制
+        if is_soloed:
+            self.inherit_alpha_btn.hide()
+            self.alpha_lock_btn.hide()
+            self.lock_btn.hide()
+            self.pt_btn.hide()
+            self.vis_btn.show()
+            raw_tip = "[纯净原色模式] 点击切换为原图层效果" if raw_mode else "[原图层效果模式] 点击切换为纯净原色模式"
+            self.vis_btn.setIcon(get_lucide_icon("sparkles" if raw_mode else "eye", t.ACCENT, 14))
+            self.vis_btn.setToolTip(raw_tip)
+            return
 
         # 可见性与锁定
         self.vis_btn.setVisible(show_lock_vis)
