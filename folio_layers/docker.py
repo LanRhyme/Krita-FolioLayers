@@ -108,6 +108,15 @@ class LayerTreeWidget(QTreeWidget):
         if vbar:
             vbar.setValue(vbar.value() + self._scroll_step)
 
+    def _clear_drag_indicator(self):
+        if hasattr(self, '_active_drag_widget') and self._active_drag_widget:
+            try:
+                self._active_drag_widget.set_drop_indicator(None)
+            except Exception:
+                pass
+            self._active_drag_widget = None
+            self._active_drag_pos = None
+
     def dragMoveEvent(self, event):
         super().dragMoveEvent(event)
         margin = 55
@@ -135,9 +144,28 @@ class LayerTreeWidget(QTreeWidget):
             self._scroll_step = 0
             self._auto_scroll_timer.stop()
 
+        # 粗线拖拽插入指示器高亮
+        target_item = self.itemAt(pos)
+        target_widget = self.itemWidget(target_item, 0) if target_item else None
+        drop_ind = self.dropIndicatorPosition()
+        
+        above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
+        below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
+        on_item = getattr(QAbstractItemView.DropIndicatorPosition, 'OnItem', None)
+        
+        pos_str = "above" if drop_ind == above else ("below" if drop_ind == below else ("on" if drop_ind == on_item else None))
+
+        if getattr(self, '_active_drag_widget', None) != target_widget or getattr(self, '_active_drag_pos', None) != pos_str:
+            self._clear_drag_indicator()
+            if target_widget and hasattr(target_widget, 'set_drop_indicator'):
+                target_widget.set_drop_indicator(pos_str)
+                self._active_drag_widget = target_widget
+                self._active_drag_pos = pos_str
+
     def dragLeaveEvent(self, event):
         self._scroll_dir = 0
         self._auto_scroll_timer.stop()
+        self._clear_drag_indicator()
         super().dragLeaveEvent(event)
 
     def mousePressEvent(self, event):
@@ -151,6 +179,7 @@ class LayerTreeWidget(QTreeWidget):
     def dropEvent(self, event):
         self._scroll_dir = 0
         self._auto_scroll_timer.stop()
+        self._clear_drag_indicator()
         if hasattr(event, 'position'):
             pos = event.position().toPoint()
         else:

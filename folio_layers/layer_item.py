@@ -446,6 +446,21 @@ class LayerRowWidget(QWidget):
         except Exception:
             self.thumb_label.clear()
 
+    # ====== 拖拽插入指示条 ======
+    def set_drop_indicator(self, pos_str):
+        t = get_theme()
+        if not pos_str:
+            self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; border: none; }")
+            return
+        if pos_str == "above":
+            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: transparent; border-top: 4px solid {t.ACCENT}; }}")
+        elif pos_str == "below":
+            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: transparent; border-bottom: 4px solid {t.ACCENT}; }}")
+        elif pos_str == "on":
+            self.setStyleSheet(f"QWidget#LayerRowWidget {{ background: rgba({t.ACCENT_RGB}, 0.2); border: 2px solid {t.ACCENT}; }}")
+        else:
+            self.setStyleSheet("QWidget#LayerRowWidget { background: transparent; border: none; }")
+
     # ====== 事件交互 ======
     def _toggle_visibility(self):
         if self.node:
