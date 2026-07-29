@@ -45,12 +45,12 @@ class LayerTreeWidget(QTreeWidget):
         self._hover_timer.setSingleShot(True)
         self._hover_timer.timeout.connect(self._on_hover_timeout)
 
-        # 拖拽边缘自动平滑滚动
-        self.setAutoScroll(True)
-        self.setAutoScrollMargin(35)
+        # 禁用 Qt 原生暴力的整行跳跃 autoScroll，改由 Python 像素级控速
+        self.setAutoScroll(False)
         self._scroll_dir = 0
+        self._scroll_step = 0
         self._auto_scroll_timer = QTimer(self)
-        self._auto_scroll_timer.setInterval(25)
+        self._auto_scroll_timer.setInterval(35)
         self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
 
     def eventFilter(self, obj, event):
@@ -116,14 +116,15 @@ class LayerTreeWidget(QTreeWidget):
         if y < margin:
             dist = max(0, y)
             ratio = (margin - dist) / margin
-            self._scroll_step = -int(1 + ratio * 2.5)
+            # 极慢速度：1px ~ 2px 像素级轻柔滚屏
+            self._scroll_step = -1 if ratio < 0.6 else -2
             self._scroll_dir = -1
             if not self._auto_scroll_timer.isActive():
                 self._auto_scroll_timer.start()
         elif vp.height() - y < margin:
             dist = max(0, vp.height() - y)
             ratio = (margin - dist) / margin
-            self._scroll_step = int(1 + ratio * 2.5)
+            self._scroll_step = 1 if ratio < 0.6 else 2
             self._scroll_dir = 1
             if not self._auto_scroll_timer.isActive():
                 self._auto_scroll_timer.start()
