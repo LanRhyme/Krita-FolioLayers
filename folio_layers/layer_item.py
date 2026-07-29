@@ -185,6 +185,7 @@ class LayerRowWidget(QWidget):
         layout.addWidget(self.pt_btn)
 
         # 建立滑动面板容器（左划弹出的独显与删除按钮）
+        t = get_theme()
         self.swipe_container = QWidget(self)
         self.swipe_container.setFixedHeight(row_h)
         self.swipe_container.setStyleSheet(f"background: {t.BG_BASE}; border-radius: 2px;")
