@@ -100,30 +100,36 @@ class LayerTreeWidget(QTreeWidget):
             self.docker.show_hover_preview(w.node, QCursor.pos())
 
     def _do_auto_scroll(self):
-        if self._scroll_dir == 0:
+        if self._scroll_dir == 0 or self._scroll_step == 0:
             return
         vbar = self.verticalScrollBar()
         if vbar:
-            step = 12 if self._scroll_dir > 0 else -12
-            vbar.setValue(vbar.value() + step)
+            vbar.setValue(vbar.value() + self._scroll_step)
 
     def dragMoveEvent(self, event):
         super().dragMoveEvent(event)
-        margin = 35
+        margin = 40
         vp = self.viewport()
         pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
         y = pos.y()
 
         if y < margin:
+            dist = max(0, y)
+            ratio = (margin - dist) / margin
+            self._scroll_step = -int(2 + ratio * 5)
             self._scroll_dir = -1
             if not self._auto_scroll_timer.isActive():
                 self._auto_scroll_timer.start()
         elif vp.height() - y < margin:
+            dist = max(0, vp.height() - y)
+            ratio = (margin - dist) / margin
+            self._scroll_step = int(2 + ratio * 5)
             self._scroll_dir = 1
             if not self._auto_scroll_timer.isActive():
                 self._auto_scroll_timer.start()
         else:
             self._scroll_dir = 0
+            self._scroll_step = 0
             self._auto_scroll_timer.stop()
 
     def dragLeaveEvent(self, event):
