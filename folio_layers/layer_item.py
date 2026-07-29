@@ -30,9 +30,10 @@ class IndentGuideWidget(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         
-        pen = QPen(QColor(t.BORDER))
+        pen = QPen(QColor(t.TEXT_MUTED))
         pen.setWidth(1)
-        pen.setStyle(Qt.PenStyle.DotLine)
+        pen.setStyle(Qt.PenStyle.SolidLine)
+        p.setOpacity(0.35)
         p.setPen(pen)
 
         h = self.height()
@@ -280,13 +281,8 @@ class LayerRowWidget(QWidget):
 
         self.type_icon.setVisible(show_type_icon)
         if show_type_icon:
-            if is_group:
-                group_icon = "folder-open" if expanded else "folder"
-                icon_color = t.ACCENT if vis else t.TEXT_MUTED
-                self.type_icon.setPixmap(get_lucide_pixmap(group_icon, icon_color, 14))
-            else:
-                icon_color = t.TEXT_MUTED if not vis else t.TEXT_MAIN
-                self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], icon_color, 14))
+            icon_color = t.TEXT_MUTED if not vis else (t.ACCENT if is_group else t.TEXT_MAIN)
+            self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], icon_color, 14))
 
         self.expand_btn.setVisible(is_group)
         if is_group:
