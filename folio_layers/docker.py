@@ -39,6 +39,8 @@ class LayerTreeWidget(QTreeWidget):
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
         self.viewport().installEventFilter(self)
+        self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
 
         self._hover_item = None
         self._hover_timer = QTimer(self)
@@ -50,7 +52,7 @@ class LayerTreeWidget(QTreeWidget):
         self._scroll_dir = 0
         self._scroll_step = 0
         self._auto_scroll_timer = QTimer(self)
-        self._auto_scroll_timer.setInterval(35)
+        self._auto_scroll_timer.setInterval(30)
         self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
 
     def eventFilter(self, obj, event):
