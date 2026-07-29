@@ -307,6 +307,17 @@ class LayerTreeWidget(QTreeWidget):
                     _reattach_subtree(child, sub_backup)
 
         def _reorder_with_children(drag_node, new_parent, above_sibling):
+            # Krita 官方规则：如果被拖拽图层处于锁定状态 (locked)，保留原图层，在目标位置克隆副本
+            if drag_node.locked():
+                cloned_node = drag_node.duplicate()
+                try:
+                    cloned_node.setLocked(False)
+                except Exception:
+                    pass
+                new_parent.addChildNode(cloned_node, above_sibling)
+                doc.setActiveNode(cloned_node)
+                return
+
             is_group = drag_node.type() == "grouplayer"
             saved_tree = _backup_subtree(drag_node) if is_group else None
             old_parent = drag_node.parentNode()
