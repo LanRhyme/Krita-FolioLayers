@@ -52,7 +52,7 @@ class LayerTreeWidget(QTreeWidget):
         self._scroll_dir = 0
         self._scroll_step = 0
         self._auto_scroll_timer = QTimer(self)
-        self._auto_scroll_timer.setInterval(30)
+        self._auto_scroll_timer.setInterval(16)
         self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
 
     def eventFilter(self, obj, event):
@@ -110,7 +110,7 @@ class LayerTreeWidget(QTreeWidget):
 
     def dragMoveEvent(self, event):
         super().dragMoveEvent(event)
-        margin = 30
+        margin = 55
         vp = self.viewport()
         pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
         y = pos.y()
@@ -118,15 +118,15 @@ class LayerTreeWidget(QTreeWidget):
         if y < margin:
             dist = max(0, y)
             ratio = (margin - dist) / margin
-            # 极慢速度：1px ~ 2px 像素级轻柔滚屏
-            self._scroll_step = -1 if ratio < 0.6 else -2
+            # 渐进平滑调速：2px ~ 8px 60FPS 顺滑滚屏
+            self._scroll_step = -int(2 + ratio * 6)
             self._scroll_dir = -1
             if not self._auto_scroll_timer.isActive():
                 self._auto_scroll_timer.start()
         elif vp.height() - y < margin:
             dist = max(0, vp.height() - y)
             ratio = (margin - dist) / margin
-            self._scroll_step = 1 if ratio < 0.6 else 2
+            self._scroll_step = int(2 + ratio * 6)
             self._scroll_dir = 1
             if not self._auto_scroll_timer.isActive():
                 self._auto_scroll_timer.start()
