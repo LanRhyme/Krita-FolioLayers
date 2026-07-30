@@ -66,26 +66,33 @@ class LayerTreeWidget(QTreeWidget):
                 cfg = get_config()
                 if cfg.enable_hover_preview:
                     item = self.itemAt(event.pos())
-                    if item and item == self._hover_item:
-                        if self.docker.hover_preview.isVisible():
-                            self.docker.hover_preview.popup_at(QCursor.pos())
-                    else:
-                        self._hover_item = item
-                        if item:
-                            w = self.itemWidget(item, 0)
-                            if w and w.node:
+                    if item:
+                        w = self.itemWidget(item, 0)
+                        if w and w.node:
+                            if item != self._hover_item:
+                                self._hover_item = item
                                 if self.docker.hover_preview.isVisible() or getattr(self.docker, '_hover_active', False):
-                                    # 处于预览激活状态，从一个图层移动到另一个图层瞬间无缝切换！
+                                    # 处于预览激活状态，从一个图层移动到另一个图层瞬间无缝切换
                                     self.docker.show_hover_preview(w.node, QCursor.pos())
                                 else:
-                                    # 首次悬停，400ms (0.4秒) 后流畅弹出大图预览
-                                    self._hover_timer.start(400)
+                                    # 首次悬停，保持标准的 1000ms (1秒) 定时器
+                                    self._hover_timer.start(1000)
                             else:
-                                self._hover_timer.stop()
-                                self.docker.reset_hover_state()
+                                # 在同一个图层项内部移动 (无论是经过缩略图、图标还是名称)
+                                if self.docker.hover_preview.isVisible():
+                                    # 仅跟随鼠标移动位置，绝不重新渲染更新 Node，彻底消除闪烁
+                                    self.docker.hover_preview.popup_at(QCursor.pos())
+                                elif not self._hover_timer.isActive() and not getattr(self.docker, '_hover_active', False):
+                                    # 如果定时器此前未启动，重新启动 1000ms 悬停定时器
+                                    self._hover_timer.start(1000)
                         else:
                             self._hover_timer.stop()
+                            self._hover_item = None
                             self.docker.reset_hover_state()
+                    else:
+                        self._hover_timer.stop()
+                        self._hover_item = None
+                        self.docker.reset_hover_state()
             elif ev_type == ev_leave:
                 self._hover_timer.stop()
                 self._hover_item = None

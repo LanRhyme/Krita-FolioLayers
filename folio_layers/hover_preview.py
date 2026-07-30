@@ -48,6 +48,7 @@ class HoverPreviewPopup(QFrame):
         super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.current_node_uid = None
 
         self.setFixedSize(260, 300)
 
@@ -164,11 +165,16 @@ class HoverPreviewPopup(QFrame):
         self.opacity_label.setStyleSheet(f"color: {t.TEXT_MUTED}; font-size: 10px;")
         self.blend_label.setStyleSheet(f"color: {t.ACCENT}; font-size: 10px; font-weight: 500;")
 
-    def update_node(self, node):
+    def update_node(self, node, force=False):
         """用 Krita Node 更新浮窗数据"""
         if not node:
             return
 
+        uid = str(node.uniqueId()) if hasattr(node, 'uniqueId') else str(id(node))
+        if not force and self.current_node_uid == uid:
+            return # Node 未改变，仅随鼠标平滑移动，绝不重复重绘 QSS 与图像，消除闪烁
+
+        self.current_node_uid = uid
         self.refresh_theme_styles()
         t = get_theme()
 
