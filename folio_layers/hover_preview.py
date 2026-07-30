@@ -166,24 +166,23 @@ class HoverPreviewPopup(QFrame):
         self.opacity_label.setStyleSheet(f"color: {t.TEXT_MUTED}; font-size: 10px;")
         self.blend_label.setStyleSheet(f"color: {t.ACCENT}; font-size: 10px; font-weight: 500;")
 
-    def update_node(self, node, force=False):
-        """用 Krita Node 更新浮窗数据"""
+    def update_node(self, node, force=False, docker_widget=None):
         if not node:
             return
 
         uid = str(node.uniqueId()) if hasattr(node, 'uniqueId') else str(id(node))
         if not force and self.current_node_uid == uid:
-            return # Node 未改变，仅随鼠标平滑移动，绝不重复重绘 QSS 与图像，消除闪烁
+            return
 
         self.current_node_uid = uid
-        self.refresh_theme_styles()
         t = get_theme()
+        self.refresh_theme_styles()
 
-        name = node.name()
-        self.name_label.setText(name)
-
-        ntype = node.type()
+        # 图层类型与基本信息
+        ntype = str(node.type()) if hasattr(node, 'type') else "paintlayer"
         type_info = get_layer_type_info(ntype)
+
+        self.name_label.setText(node.name() if hasattr(node, 'name') else "未命名图层")
         self.type_badge.setText(type_info[0])
         self.type_badge.setStyleSheet(f"""
             background-color: {t.BG_ALT};
@@ -196,9 +195,15 @@ class HoverPreviewPopup(QFrame):
         """)
         self.type_icon_label.setPixmap(get_lucide_pixmap(type_info[2], type_info[1], 16))
 
-        # 获取缩略图（投影与极速 Node 缩略图模式）
+        # 获取缩略图（优先从 docker_widget.thumbnail_cache 提取 0.01ms 极速缓存图）
         try:
-            pix = create_projection_thumbnail(node, 220, True)
+            pix = None
+            if docker_widget and hasattr(docker_widget, 'thumbnail_cache') and uid in docker_widget.thumbnail_cache:
+                pix = docker_widget.thumbnail_cache[uid]
+
+            if not pix or pix.isNull():
+                pix = create_projection_thumbnail(node, 220, True)
+
             if pix and not pix.isNull():
                 scaled_pix = pix.scaled(
                     QSize(220, 170),
