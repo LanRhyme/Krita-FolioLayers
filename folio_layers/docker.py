@@ -61,6 +61,17 @@ class LayerTreeWidget(QTreeWidget):
         self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
 
     def eventFilter(self, obj, event):
+        if obj == self.viewport():
+            ev_type = event.type()
+            ev_mouse_move = getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None))
+            if ev_type == ev_mouse_move:
+                global_pos = QCursor.pos()
+                vp_pos = self.viewport().mapFromGlobal(global_pos)
+                item = self.itemAt(vp_pos)
+                if item:
+                    w = self.itemWidget(item, 0)
+                    if w and hasattr(self.docker, '_on_row_mouse_move'):
+                        self.docker._on_row_mouse_move(w, global_pos)
         return super().eventFilter(obj, event)
 
     def _on_hover_timeout(self):
