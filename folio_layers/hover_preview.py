@@ -247,6 +247,10 @@ class HoverPreviewPopup(QFrame):
         except Exception:
             self.inherit_alpha_badge.clear()
 
+        # 强制更新重绘，确保浮窗已开启时跨图层瞬间刷新画面
+        self.card.update()
+        self.update()
+
     def popup_at(self, global_pos, docker_widget=None):
         """在指定全局坐标位置安全显示（避开图层面板与屏幕边缘）"""
         screen = QApplication.primaryScreen()
@@ -275,8 +279,10 @@ class HoverPreviewPopup(QFrame):
 
         self.move(x, y)
 
-        # 如果已经在显示状态，只平移位置，绝不重新触发淡入动画（彻底消除闪烁）
+        # 如果已经在显示状态，平移位置并强制重绘刷新画面
         if self.isVisible():
+            self.card.update()
+            self.update()
             self.raise_()
             return
 

@@ -864,6 +864,10 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self._hover_active = True
         self.hover_preview.update_node(node, force=True, docker_widget=self)
         self.hover_preview.popup_at(global_pos, docker_widget=self)
+        if not self.hover_preview.isVisible():
+            self.hover_preview.show()
+        self.hover_preview.raise_()
+        self.hover_preview.update()
 
     def hide_hover_preview(self):
         self.hover_preview.hide()
