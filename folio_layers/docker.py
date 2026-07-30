@@ -846,7 +846,8 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
     # ====== 悬停预览接口 ======
     def show_hover_preview(self, node, global_pos):
-        self.hover_preview.update_node(node)
+        self._hover_active = True
+        self.hover_preview.update_node(node, force=True)
         self.hover_preview.popup_at(global_pos)
         self._hover_active = True
 

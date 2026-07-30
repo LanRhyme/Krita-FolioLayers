@@ -181,11 +181,15 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
-        # 穿透鼠标事件，确保在图层项的任意区域 (缩略图/标签/文字/连线/底行) 悬停都能 100% 稳定触发大图预览浮窗
-        for sub in (self.color_bar, self.thumb_label, self.type_icon, self.name_label,
-                    self.sub_info_widget, self.blend_label, self.opacity_label, self.size_label):
+        # 开启所有子控件鼠标跟踪，确保悬停在 40x40 缩略图和图层图标上时能 100% 触发事件
+        self.setMouseTracking(True)
+        for sub in (self.select_btn, self.color_bar, self.expand_btn, self.thumb_label,
+                    self.type_icon, self.name_label, self.sub_info_widget,
+                    self.blend_label, self.opacity_label, self.size_label):
+            sub.setMouseTracking(True)
             sub.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         if hasattr(self, 'indent_spacer') and self.indent_spacer:
+            self.indent_spacer.setMouseTracking(True)
             self.indent_spacer.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         # ====== 建立悬浮滑动操作面板 (极简 Morandi 无边缝滑动层) ======
