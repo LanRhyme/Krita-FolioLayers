@@ -910,7 +910,11 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
     def _sync_node_tree(self, parent_node, parent_tree_item, active_node):
         from .layer_item import LayerRowWidget
+        from .config import get_config
+        cfg = get_config()
         children = parent_node.childNodes()
+        if not cfg.show_selection_masks:
+            children = [n for n in children if n.type() != "selectionmask"]
         target_nodes = list(reversed(children))
         
         current_items = []

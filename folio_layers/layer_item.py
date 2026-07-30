@@ -353,9 +353,15 @@ class LayerRowWidget(QWidget):
 
         # 检查是否有子节点（包含图层组及挂载了蒙版的图层）
         try:
-            has_children = (is_group or len(self.node.childNodes()) > 0)
+            cfg = get_config()
+            cnodes = self.node.childNodes()
+            if not cfg.show_selection_masks:
+                cnodes = [n for n in cnodes if n.type() != "selectionmask"]
+            has_children = (is_group or len(cnodes) > 0)
+            child_cnt = len(cnodes)
         except Exception:
             has_children = is_group
+            child_cnt = 0
 
         expanded = self.tree_item.isExpanded() if has_children else False
 
@@ -375,10 +381,6 @@ class LayerRowWidget(QWidget):
 
         # 图层组视觉强化: 加粗标题 + 显示子图层数量
         if is_group:
-            try:
-                child_cnt = len(self.node.childNodes())
-            except Exception:
-                child_cnt = 0
             self.name_label.setText(f"{self.node.name()} ({child_cnt}){solo_tag}")
             self.name_label.setStyleSheet(f"color: {t.ACCENT if is_soloed else (t.TEXT_MAIN if vis else t.TEXT_MUTED)}; font-weight: 600;")
         else:

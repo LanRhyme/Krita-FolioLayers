@@ -126,6 +126,10 @@ class SettingsDialog(QDialog):
         self.check_group_count.setChecked(cfg.show_group_count)
         l_visual.addWidget(self.check_group_count)
 
+        self.check_selection_masks = QCheckBox("在图层列表中显示选区蒙版 (Selection Mask)")
+        self.check_selection_masks.setChecked(cfg.show_selection_masks)
+        l_visual.addWidget(self.check_selection_masks)
+
         layout.addWidget(grp_visual)
 
         # 分组 2: 交互与手势
@@ -184,4 +188,5 @@ class SettingsDialog(QDialog):
         cfg.enable_hover_preview = self.check_hover.isChecked()
         cfg.show_group_count = self.check_group_count.isChecked()
         cfg.enable_swipe_gesture = self.check_swipe.isChecked()
+        cfg.show_selection_masks = self.check_selection_masks.isChecked()
         self.accept()

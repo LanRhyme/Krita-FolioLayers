@@ -18,7 +18,7 @@ class LayerDockerConfig:
 
     @property
     def thumb_size(self) -> int:
-        return int(self.settings.value("thumb_size", 40))  # 默认改成 40x40 px
+        return int(self.settings.value("thumb_size", 40))  # 默认 40x40 px
 
     @thumb_size.setter
     def thumb_size(self, val: int):
@@ -67,6 +67,15 @@ class LayerDockerConfig:
     @enable_swipe_gesture.setter
     def enable_swipe_gesture(self, val: bool):
         self.settings.setValue("enable_swipe_gesture", bool(val))
+
+    @property
+    def show_selection_masks(self) -> bool:
+        v = self.settings.value("show_selection_masks", False)  # 默认不显示选区蒙版
+        return str(v).lower() in ("true", "1")
+
+    @show_selection_masks.setter
+    def show_selection_masks(self, val: bool):
+        self.settings.setValue("show_selection_masks", bool(val))
 
     @property
     def solo_shortcut(self) -> str:
