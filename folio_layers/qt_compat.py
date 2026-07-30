@@ -36,7 +36,7 @@ try:
     if hasattr(Qt, 'AlignmentFlag'):
         _fix_qt_enum(Qt.AlignmentFlag, ['AlignCenter', 'AlignLeft', 'AlignRight', 'AlignTop', 'AlignBottom', 'AlignVCenter', 'AlignHCenter'])
     if hasattr(Qt, 'WindowType'):
-        _fix_qt_enum(Qt.WindowType, ['ToolTip', 'FramelessWindowHint', 'WindowStaysOnTopHint', 'Popup'])
+        _fix_qt_enum(Qt.WindowType, ['ToolTip', 'Tool', 'SubWindow', 'FramelessWindowHint', 'WindowStaysOnTopHint', 'Popup'])
     if hasattr(Qt, 'FocusPolicy'):
         _fix_qt_enum(Qt.FocusPolicy, ['StrongFocus', 'NoFocus', 'TabFocus', 'ClickFocus'])
     if hasattr(Qt, 'DockWidgetArea'):

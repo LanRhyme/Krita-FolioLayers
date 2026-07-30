@@ -45,7 +45,12 @@ class HoverPreviewPopup(QFrame):
     """动态主题浮动预览弹窗，鼠标悬停图层项时弹出大图和详细参数"""
 
     def __init__(self, parent=None):
-        super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        flags = (
+            getattr(Qt, 'Tool', getattr(getattr(Qt, 'WindowType', None), 'Tool', 0)) |
+            getattr(Qt, 'FramelessWindowHint', getattr(getattr(Qt, 'WindowType', None), 'FramelessWindowHint', 0)) |
+            getattr(Qt, 'WindowStaysOnTopHint', getattr(getattr(Qt, 'WindowType', None), 'WindowStaysOnTopHint', 0))
+        )
+        super().__init__(None, flags)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
