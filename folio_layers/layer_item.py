@@ -726,7 +726,7 @@ class LayerRowWidget(QWidget):
         if ev_type in (ev_mouse_move, ev_enter):
             if self.docker and hasattr(self.docker, '_on_row_mouse_move'):
                 self.docker._on_row_mouse_move(self, QCursor.pos())
-        elif ev_type == ev_leave:
+        elif ev_type == ev_leave and obj == self:
             if self.docker and hasattr(self.docker, '_on_row_mouse_leave'):
                 self.docker._on_row_mouse_leave(self)
 
