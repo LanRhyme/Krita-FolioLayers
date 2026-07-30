@@ -26,7 +26,12 @@ class IndentGuideWidget(QWidget):
     def paintEvent(self, event):
         t = get_theme()
         painter = QPainter(self)
-        pen = QPen(QColor(t.BORDER), 1, Qt.PenStyle.SolidLine)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # 使用自适应亮度的 TEXT_MUTED 颜色，确保在深色模式与浅色模式下缩进线清晰可见
+        line_color = QColor(t.TEXT_MUTED)
+        line_color.setAlpha(140)
+        pen = QPen(line_color, 1, Qt.PenStyle.SolidLine)
         painter.setPen(pen)
 
         for i in range(self.depth):
