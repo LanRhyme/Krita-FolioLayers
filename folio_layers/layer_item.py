@@ -718,8 +718,9 @@ class LayerRowWidget(QWidget):
     def _get_swipe_geometry(self):
         w = 165
         row_h = self.height()
+        # 向上微调 -2px，精确消除 QTreeWidget 单元格的 2px 顶部偏移
+        y = -2
         h = max(20, row_h)
-        y = 0
         end_x = max(0, self.width() - w)
         start_x = self.width()
         return start_x, end_x, y, w, h
