@@ -5,7 +5,7 @@ import sys
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
-    Qt, QSize, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
+    Qt, QSize, QRect, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
     QEvent, QPainter, QPen, QPoint
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
