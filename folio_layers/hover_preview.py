@@ -3,7 +3,7 @@
 
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, Qt, QPixmap, QColor,
-    QFont, QGraphicsDropShadowEffect, QSize, QRect, QApplication,
+    QFont, QPoint, QGraphicsDropShadowEffect, QSize, QRect, QApplication,
     QGraphicsOpacityEffect, QPropertyAnimation, QEasingCurve
 )
 from .lucide_icons import get_lucide_pixmap
