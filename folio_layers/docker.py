@@ -39,6 +39,11 @@ class LayerTreeWidget(QTreeWidget):
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
         self.viewport().installEventFilter(self)
+
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(self)
+
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
 
@@ -55,7 +60,7 @@ class LayerTreeWidget(QTreeWidget):
         self._auto_scroll_timer.setInterval(16)
         self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
 
-    def _handle_hover_for_node(self, item):
+    def _handle_hover_for_node(self, item, global_pos):
         from .config import get_config
         cfg = get_config()
         if not cfg.enable_hover_preview:
@@ -68,15 +73,15 @@ class LayerTreeWidget(QTreeWidget):
                     self._hover_item = item
                     if self.docker.hover_preview.isVisible() or getattr(self.docker, '_hover_active', False):
                         # 处于预览激活状态，跨图层平滑无缝切换
-                        self.docker.show_hover_preview(w.node, QCursor.pos())
+                        self.docker.show_hover_preview(w.node, global_pos)
                     else:
                         # 首次悬停新图层，启动 1000ms 定时器
                         self._hover_timer.start(1000)
                 else:
-                    # 同图层内部移动 (无论光标在缩略图、类型图标、名称还是底行上)
+                    # 同图层内部移动 (无论光标在 40x40 缩略图、类型图标、名称还是底行上)
                     if self.docker.hover_preview.isVisible():
                         # 浮窗开启中：仅平滑跟随鼠标位置，绝不重新渲染更新 Node，彻底消除闪烁！
-                        self.docker.hover_preview.popup_at(QCursor.pos())
+                        self.docker.hover_preview.popup_at(global_pos)
                     elif not self._hover_timer.isActive() and not getattr(self.docker, '_hover_active', False):
                         # 浮窗未开启且定时器未启动：启动 1000ms 悬停定时器
                         self._hover_timer.start(1000)
@@ -87,26 +92,27 @@ class LayerTreeWidget(QTreeWidget):
         self.docker.reset_hover_state()
 
     def eventFilter(self, obj, event):
-        if obj == self.viewport():
+        # 拦截发往 LayerTreeWidget 及其内部所有子控件 (40x40 缩略图, 类型图标, 名字标签) 的鼠标事件
+        if isinstance(obj, QWidget) and (obj == self or obj == self.viewport() or self.isAncestorOf(obj)):
             ev_type = event.type()
             ev_mouse_move = getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None))
+            ev_enter = getattr(QEvent, 'Enter', getattr(getattr(QEvent, 'Type', None), 'Enter', None))
             ev_leave = getattr(QEvent, 'Leave', getattr(getattr(QEvent, 'Type', None), 'Leave', None))
 
-            if ev_type == ev_mouse_move:
-                item = self.itemAt(event.pos())
-                self._handle_hover_for_node(item)
-            elif ev_type == ev_leave:
-                # 关键：判断光标是否真的离开了图层树视口区域
-                vp_pos = self.viewport().mapFromGlobal(QCursor.pos())
+            if ev_type in (ev_mouse_move, ev_enter):
+                global_pos = QCursor.pos()
+                vp_pos = self.viewport().mapFromGlobal(global_pos)
                 if self.viewport().rect().contains(vp_pos):
-                    # 光标处于视口内部子控件上（如 40x40 缩略图或图标），重新解析 item 绝不误杀！
                     item = self.itemAt(vp_pos)
-                    self._handle_hover_for_node(item)
-                else:
-                    # 鼠标确实离开了图层树视口外
+                    self._handle_hover_for_node(item, global_pos)
+            elif ev_type == ev_leave:
+                global_pos = QCursor.pos()
+                vp_pos = self.viewport().mapFromGlobal(global_pos)
+                if not self.viewport().rect().contains(vp_pos):
                     self._hover_timer.stop()
                     self._hover_item = None
                     self.docker.reset_hover_state()
+
         return super().eventFilter(obj, event)
 
     def _on_hover_timeout(self):
