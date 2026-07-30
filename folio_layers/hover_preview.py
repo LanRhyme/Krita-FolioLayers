@@ -253,6 +253,13 @@ class HoverPreviewPopup(QFrame):
 
     def popup_at(self, global_pos, docker_widget=None):
         """在指定全局坐标位置安全显示（避开图层面板与屏幕边缘）"""
+        # 如果已经在显示状态，绝对不要调用 self.move()，防止 Wayland 机制误杀/销毁 Surface 导致消失！
+        if self.isVisible():
+            self.card.update()
+            self.update()
+            self.raise_()
+            return
+
         screen = QApplication.primaryScreen()
         geo = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
 
@@ -279,12 +286,20 @@ class HoverPreviewPopup(QFrame):
 
         self.move(x, y)
 
-        # 如果已经在显示状态，平移位置并强制重绘刷新画面
-        if self.isVisible():
-            self.card.update()
-            self.update()
-            self.raise_()
-            return
+        # 仅在首次弹出时播放淡入动画
+        effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(effect)
+        
+        anim = QPropertyAnimation(effect, b"opacity", self)
+        anim.setDuration(180)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(getattr(QEasingCurve, 'OutCubic', getattr(getattr(QEasingCurve, 'Type', None), 'OutCubic', 0)))
+        anim.start()
+        self._fade_anim = anim
+
+        self.show()
+        self.raise_()
 
         # 仅在首次弹出时播放淡入动画
         effect = QGraphicsOpacityEffect(self)
