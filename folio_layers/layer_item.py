@@ -721,14 +721,10 @@ class LayerRowWidget(QWidget):
         ev_type = event.type()
         ev_mouse_move = getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None))
         ev_enter = getattr(QEvent, 'Enter', getattr(getattr(QEvent, 'Type', None), 'Enter', None))
-        ev_leave = getattr(QEvent, 'Leave', getattr(getattr(QEvent, 'Type', None), 'Leave', None))
 
         if ev_type in (ev_mouse_move, ev_enter):
             if self.docker and hasattr(self.docker, '_on_row_mouse_move'):
                 self.docker._on_row_mouse_move(self, QCursor.pos())
-        elif ev_type == ev_leave and obj == self:
-            if self.docker and hasattr(self.docker, '_on_row_mouse_leave'):
-                self.docker._on_row_mouse_leave(self)
 
         return super().eventFilter(obj, event)
 
