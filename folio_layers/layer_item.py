@@ -181,41 +181,46 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
-        # ====== 建立悬浮滑动操作面板 (左划滑动露出 选区、独显 与 删除 按钮) ======
+        # ====== 建立悬浮滑动操作面板 (极简 Morandi 胶囊排布) ======
         self.swipe_container = QWidget(self)
+        self.swipe_container.setObjectName("SwipeContainer")
         self.swipe_container.setStyleSheet(f"""
-            QWidget {{
-                background-color: {t.BG_DARK};
+            QWidget#SwipeContainer {{
+                background-color: {t.BG_BASE};
                 border: 1px solid {t.BORDER};
-                border-radius: 4px;
+                border-radius: 5px;
             }}
         """)
         s_layout = QHBoxLayout(self.swipe_container)
-        s_layout.setContentsMargins(1, 1, 1, 1)
-        s_layout.setSpacing(2)
+        s_layout.setContentsMargins(2, 2, 2, 2)
+        s_layout.setSpacing(3)
+
+        btn_base_qss = f"""
+            QToolButton {{
+                background-color: transparent;
+                color: {t.TEXT_MAIN};
+                border: none;
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 500;
+                padding: 1px 4px;
+            }}
+        """
 
         # 1. 选区按钮
         self.btn_swipe_select = QToolButton(self.swipe_container)
         self.btn_swipe_select.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.btn_swipe_select.setIcon(get_lucide_icon("box-select", "#4299e1", 11))
+        self.btn_swipe_select.setIcon(get_lucide_icon("box-select", t.TEXT_MAIN, 12))
         self.btn_swipe_select.setText(" 选区")
         self.btn_swipe_select.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.btn_swipe_select.setToolTip("从当前图层不透明像素提取选区")
-        self.btn_swipe_select.setStyleSheet(f"""
-            QToolButton {{
-                background-color: rgba(66, 153, 225, 0.16);
-                color: #4299e1;
-                border: 1px solid rgba(66, 153, 225, 0.35);
-                border-radius: 3px;
-                font-size: 10px;
-                font-weight: 600;
-            }}
+        self.btn_swipe_select.setStyleSheet(btn_base_qss + f"""
             QToolButton:hover {{
-                background-color: rgba(66, 153, 225, 0.32);
-                border: 1px solid #4299e1;
+                background-color: rgba(66, 153, 225, 0.2);
+                color: #4299e1;
             }}
             QToolButton:pressed {{
-                background-color: rgba(66, 153, 225, 0.5);
+                background-color: rgba(66, 153, 225, 0.35);
             }}
         """)
         self.btn_swipe_select.clicked.connect(self._on_swipe_select_clicked)
@@ -223,25 +228,17 @@ class LayerRowWidget(QWidget):
         # 2. 独显按钮
         self.btn_swipe_solo = QToolButton(self.swipe_container)
         self.btn_swipe_solo.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.btn_swipe_solo.setIcon(get_lucide_icon("sparkles", t.ACCENT, 11))
+        self.btn_swipe_solo.setIcon(get_lucide_icon("sparkles", t.TEXT_MAIN, 12))
         self.btn_swipe_solo.setText(" 独显")
         self.btn_swipe_solo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.btn_swipe_solo.setToolTip("独显当前图层 (纯净原色模式)")
-        self.btn_swipe_solo.setStyleSheet(f"""
-            QToolButton {{
-                background-color: rgba({t.ACCENT_RGB}, 0.16);
-                color: {t.ACCENT};
-                border: 1px solid rgba({t.ACCENT_RGB}, 0.35);
-                border-radius: 3px;
-                font-size: 10px;
-                font-weight: 600;
-            }}
+        self.btn_swipe_solo.setStyleSheet(btn_base_qss + f"""
             QToolButton:hover {{
-                background-color: rgba({t.ACCENT_RGB}, 0.32);
-                border: 1px solid {t.ACCENT};
+                background-color: rgba({t.ACCENT_RGB}, 0.22);
+                color: {t.ACCENT};
             }}
             QToolButton:pressed {{
-                background-color: rgba({t.ACCENT_RGB}, 0.5);
+                background-color: rgba({t.ACCENT_RGB}, 0.4);
             }}
         """)
         self.btn_swipe_solo.clicked.connect(self._on_swipe_solo_clicked)
@@ -249,25 +246,17 @@ class LayerRowWidget(QWidget):
         # 3. 删除按钮
         self.btn_swipe_del = QToolButton(self.swipe_container)
         self.btn_swipe_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.btn_swipe_del.setIcon(get_lucide_icon("trash-2", "#e55046", 11))
+        self.btn_swipe_del.setIcon(get_lucide_icon("trash-2", t.TEXT_MAIN, 12))
         self.btn_swipe_del.setText(" 删除")
         self.btn_swipe_del.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.btn_swipe_del.setToolTip("删除当前图层")
-        self.btn_swipe_del.setStyleSheet(f"""
-            QToolButton {{
-                background-color: rgba(229, 80, 70, 0.16);
-                color: #e55046;
-                border: 1px solid rgba(229, 80, 70, 0.35);
-                border-radius: 3px;
-                font-size: 10px;
-                font-weight: 600;
-            }}
+        self.btn_swipe_del.setStyleSheet(btn_base_qss + f"""
             QToolButton:hover {{
-                background-color: rgba(229, 80, 70, 0.32);
-                border: 1px solid #e55046;
+                background-color: rgba(229, 80, 70, 0.2);
+                color: #e55046;
             }}
             QToolButton:pressed {{
-                background-color: rgba(229, 80, 70, 0.5);
+                background-color: rgba(229, 80, 70, 0.35);
             }}
         """)
         self.btn_swipe_del.clicked.connect(self._on_swipe_del_clicked)
