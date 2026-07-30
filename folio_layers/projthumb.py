@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Native C++ projection-thumbnail bridge via ctypes + sip"""
+"""
+Native C++ projection-thumbnail bridge via ctypes + sip
+Includes cross-platform DLL/SO discovery and graceful pure-Python fallback mechanism
+"""
 
 import ctypes
 import os
@@ -20,15 +23,17 @@ _LIB_TRIED = False
 
 def _find_lib():
     candidates = []
-    # Same directory as this module
     here = os.path.dirname(os.path.abspath(__file__))
-    candidates.append(os.path.join(here, "libfolio_projthumb.so"))
-    # native/build relative to repo root
-    repo_root = os.path.dirname(here)
-    candidates.append(os.path.join(repo_root, "native", "build", "libfolio_projthumb.so"))
-    # Krita plugin directory
-    candidates.append(os.path.expanduser(
-        "~/.local/share/krita/pykrita/lucide_layer_docker/libfolio_projthumb.so"))
+    lib_names = [
+        "libfolio_projthumb.so",
+        "libfolio_projthumb.dll",
+        "folio_projthumb.dll",
+    ]
+
+    for name in lib_names:
+        candidates.append(os.path.join(here, name))
+        candidates.append(os.path.expanduser(f"~/.local/share/krita/pykrita/lucide_layer_docker/{name}"))
+        candidates.append(os.path.expandvars(f"%APPDATA%/krita/pykrita/lucide_layer_docker/{name}"))
 
     for p in candidates:
         if os.path.isfile(p):
@@ -48,68 +53,69 @@ def _load_lib():
 
     try:
         lib = ctypes.CDLL(path)
-        lib.folio_projection_thumbnail.argtypes = [
-            ctypes.c_uint64,
-            ctypes.c_int,
-            ctypes.c_int,
-            ctypes.POINTER(ctypes.c_void_p),
-            ctypes.POINTER(ctypes.c_int),
-            ctypes.POINTER(ctypes.c_int),
-            ctypes.POINTER(ctypes.c_int),
-        ]
-        lib.folio_projection_thumbnail.restype = ctypes.c_int
-        lib.folio_free.argtypes = [ctypes.c_void_p]
-        lib.folio_free.restype = None
-        _LIB = lib
-        return _LIB
+        if hasattr(lib, 'folio_projection_thumbnail'):
+            lib.folio_projection_thumbnail.argtypes = [
+                ctypes.c_uint64,
+                ctypes.c_int,
+                ctypes.c_int,
+                ctypes.POINTER(ctypes.c_void_p),
+                ctypes.POINTER(ctypes.c_int),
+                ctypes.POINTER(ctypes.c_int),
+                ctypes.POINTER(ctypes.c_int),
+            ]
+            lib.folio_projection_thumbnail.restype = ctypes.c_int
+            lib.folio_free.argtypes = [ctypes.c_void_p]
+            lib.folio_free.restype = None
+            _LIB = lib
+            return _LIB
     except Exception:
         return None
+    return None
 
 
 def native_projection_thumbnail(node, req_w, req_h):
-    """Call the C++ lib to get a projection-based thumbnail.
+    """Call the native C++ library to generate high-performance projection thumbnails.
+    If native library is unavailable (e.g. Windows without DLL), gracefully falls back to node.thumbnail().
 
-    Returns a QImage (Format_RGBA8888) or None on failure.
+    Returns a QImage or None.
     """
     lib = _load_lib()
-    if lib is None or _sip is None:
-        return None
+    if lib is not None and _sip is not None:
+        try:
+            ptr = _sip.unwrapinstance(node)
+            if ptr:
+                out = ctypes.c_void_p()
+                outw = ctypes.c_int()
+                outh = ctypes.c_int()
+                outstride = ctypes.c_int()
 
-    try:
-        ptr = _sip.unwrapinstance(node)
-    except Exception:
-        return None
-    if not ptr:
-        return None
+                ret = lib.folio_projection_thumbnail(
+                    ctypes.c_uint64(ptr),
+                    ctypes.c_int(req_w),
+                    ctypes.c_int(req_h),
+                    ctypes.byref(out),
+                    ctypes.byref(outw),
+                    ctypes.byref(outh),
+                    ctypes.byref(outstride),
+                )
+                if ret and outw.value > 0 and outh.value > 0 and out.value:
+                    w, h, stride = outw.value, outh.value, outstride.value
+                    buf_size = stride * h
+                    raw = ctypes.string_at(out.value, buf_size)
+                    img = QImage(raw, w, h, stride, QImage.Format.Format_RGBA8888)
+                    result = img.copy()
+                    lib.folio_free(out)
+                    return result
+        except Exception:
+            pass
 
-    out = ctypes.c_void_p()
-    outw = ctypes.c_int()
-    outh = ctypes.c_int()
-    outstride = ctypes.c_int()
+    # 纯 Python 无缝降级回退机制（如 Windows 未编译 dll 或动态库缺失）
+    if node and hasattr(node, 'thumbnail'):
+        try:
+            pix = node.thumbnail(req_w, req_h)
+            if pix and not pix.isNull():
+                return pix.toImage() if hasattr(pix, 'toImage') else pix
+        except Exception:
+            pass
 
-    ret = lib.folio_projection_thumbnail(
-        ctypes.c_uint64(ptr),
-        ctypes.c_int(req_w),
-        ctypes.c_int(req_h),
-        ctypes.byref(out),
-        ctypes.byref(outw),
-        ctypes.byref(outh),
-        ctypes.byref(outstride),
-    )
-    if not ret:
-        return None
-
-    w = outw.value
-    h = outh.value
-    stride = outstride.value
-    if w <= 0 or h <= 0 or not out.value:
-        if out.value:
-            lib.folio_free(out)
-        return None
-
-    buf_size = stride * h
-    raw = ctypes.string_at(out.value, buf_size)
-    img = QImage(raw, w, h, stride, QImage.Format.Format_RGBA8888)
-    result = img.copy()
-    lib.folio_free(out)
-    return result
+    return None

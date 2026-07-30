@@ -797,7 +797,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self.btn_blend.setObjectName("BlendModeBtn")
         from .qt_compat import QSizePolicy
         self.btn_blend.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.btn_blend.setFixedHeight(20)
+        self.btn_blend.setFixedHeight(24)
         self.btn_blend.setText("正常")
         self.btn_blend.setStyleSheet("font-size: 10px;")
 
@@ -805,9 +805,9 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         self.btn_blend.clicked.connect(lambda: self.blend_menu.exec(self.btn_blend.mapToGlobal(self.btn_blend.rect().bottomLeft())))
         p_layout.addWidget(self.btn_blend, 1)
 
-        # 原生 QSlider 风格不透明度条
+        # 官方 KisSliderSpinBox 风格不透明度大滑块
         self.opacity_bar = OpacityBarWidget(self.prop_card)
-        self.opacity_bar.setFixedHeight(20)
+        self.opacity_bar.setFixedHeight(24)
         self.opacity_bar.valueChanged.connect(self._on_opacity_bar_changed)
         p_layout.addWidget(self.opacity_bar, 2)
 
@@ -1221,7 +1221,10 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if doc and doc.activeNode():
             opacity_255 = int(percent_val / 100.0 * 255)
             doc.activeNode().setOpacity(opacity_255)
-            self.refresh_canvas()
+            try:
+                doc.refreshProjection()
+            except Exception:
+                self.refresh_canvas(delay=0)
 
     def _filter_layers(self, text):
         search_kw = text.strip().lower()

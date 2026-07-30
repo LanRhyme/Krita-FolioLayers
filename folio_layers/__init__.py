@@ -3,7 +3,7 @@
 Folio Layer Docker Plugin Entry Point for Krita
 """
 
-from .docker import FolioLayerDocker
+from .docker import LucideLayerDocker
 
 DOCKER_ID = "folio_layers"
 
@@ -23,7 +23,7 @@ try:
         DockWidgetFactory(
             DOCKER_ID,
             dock_position,
-            FolioLayerDocker
+            LucideLayerDocker
         )
     )
 except ImportError:
