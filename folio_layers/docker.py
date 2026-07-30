@@ -78,8 +78,8 @@ class LayerTreeWidget(QTreeWidget):
                                     # 处于预览激活状态，从一个图层移动到另一个图层瞬间无缝切换！
                                     self.docker.show_hover_preview(w.node, QCursor.pos())
                                 else:
-                                    # 首次悬停，1000ms (1秒) 后弹出
-                                    self._hover_timer.start(1000)
+                                    # 首次悬停，400ms (0.4秒) 后流畅弹出大图预览
+                                    self._hover_timer.start(400)
                             else:
                                 self._hover_timer.stop()
                                 self.docker.reset_hover_state()
