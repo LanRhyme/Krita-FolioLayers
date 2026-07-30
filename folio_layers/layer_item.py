@@ -386,7 +386,7 @@ class LayerRowWidget(QWidget):
         # --- 不透明度与混合模式 (官方逻辑) ---
         op_pct = 100
         try:
-            op_pct = int(self.node.opacity() / 255.0 * 100)
+            op_pct = round(self.node.opacity() / 255.0 * 100)
         except Exception:
             pass
 

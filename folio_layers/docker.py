@@ -998,7 +998,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
         self.btn_blend.setText(mode_name)
 
-        op_val = int(node.opacity() / 255.0 * 100)
+        op_val = round(node.opacity() / 255.0 * 100)
         self.opacity_bar.blockSignals(True)
         self.opacity_bar.setValue(op_val)
         self.opacity_bar.blockSignals(False)
@@ -1219,8 +1219,9 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             return
         doc = Krita.instance().activeDocument()
         if doc and doc.activeNode():
-            opacity_255 = int(percent_val / 100.0 * 255)
+            opacity_255 = round(percent_val / 100.0 * 255)
             doc.activeNode().setOpacity(opacity_255)
+            self.update_tree_states()
             try:
                 doc.refreshProjection()
             except Exception:
