@@ -860,16 +860,16 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
         if item and item != getattr(self.tree, '_hover_item', None):
             self.tree._hover_item = item
             if getattr(self, '_hover_active', False) or self.hover_preview.isVisible():
-                # 悬停激活状态下：跨图层 0ms 瞬间无缝切换新图层预览！
+                # 悬停已激活状态：跨图层 0ms 瞬间无缝切换新图层预览！
                 self.show_hover_preview(node, global_pos)
             else:
-                # 首次悬停：启动 1000ms 定时器
+                # 首次悬停新图层：启动 1000ms 定时器
                 self.tree._hover_timer.start(1000)
         else:
             # 在同一图层内部移动 (无论是 40x40 缩略图、图标、名称还是底行)
             if self.hover_preview.isVisible():
-                # 浮窗显示中：仅平移位置，绝不重新渲染，0% 闪烁
-                self.hover_preview.popup_at(global_pos, docker_widget=self)
+                # 同图层内部移动：保持浮窗位置绝对固定，绝不平移/重新计算，彻底消除闪烁与抖动！
+                pass
             elif not self.tree._hover_timer.isActive() and not getattr(self, '_hover_active', False):
                 self.tree._hover_timer.start(1000)
 
