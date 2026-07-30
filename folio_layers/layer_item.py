@@ -181,7 +181,7 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
-        # ====== 建立悬浮滑动操作面板 (左划滑动露出 独显 与 删除 按钮) ======
+        # ====== 建立悬浮滑动操作面板 (左划滑动露出 选区、独显 与 删除 按钮) ======
         self.swipe_container = QWidget(self)
         self.swipe_container.setStyleSheet(f"""
             QWidget {{
@@ -194,6 +194,33 @@ class LayerRowWidget(QWidget):
         s_layout.setContentsMargins(1, 1, 1, 1)
         s_layout.setSpacing(2)
 
+        # 1. 选区按钮
+        self.btn_swipe_select = QToolButton(self.swipe_container)
+        self.btn_swipe_select.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.btn_swipe_select.setIcon(get_lucide_icon("box-select", "#4299e1", 11))
+        self.btn_swipe_select.setText(" 选区")
+        self.btn_swipe_select.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.btn_swipe_select.setToolTip("从当前图层不透明像素提取选区")
+        self.btn_swipe_select.setStyleSheet(f"""
+            QToolButton {{
+                background-color: rgba(66, 153, 225, 0.16);
+                color: #4299e1;
+                border: 1px solid rgba(66, 153, 225, 0.35);
+                border-radius: 3px;
+                font-size: 10px;
+                font-weight: 600;
+            }}
+            QToolButton:hover {{
+                background-color: rgba(66, 153, 225, 0.32);
+                border: 1px solid #4299e1;
+            }}
+            QToolButton:pressed {{
+                background-color: rgba(66, 153, 225, 0.5);
+            }}
+        """)
+        self.btn_swipe_select.clicked.connect(self._on_swipe_select_clicked)
+
+        # 2. 独显按钮
         self.btn_swipe_solo = QToolButton(self.swipe_container)
         self.btn_swipe_solo.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.btn_swipe_solo.setIcon(get_lucide_icon("sparkles", t.ACCENT, 11))
@@ -219,6 +246,7 @@ class LayerRowWidget(QWidget):
         """)
         self.btn_swipe_solo.clicked.connect(self._on_swipe_solo_clicked)
 
+        # 3. 删除按钮
         self.btn_swipe_del = QToolButton(self.swipe_container)
         self.btn_swipe_del.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.btn_swipe_del.setIcon(get_lucide_icon("trash-2", "#e55046", 11))
@@ -244,6 +272,7 @@ class LayerRowWidget(QWidget):
         """)
         self.btn_swipe_del.clicked.connect(self._on_swipe_del_clicked)
 
+        s_layout.addWidget(self.btn_swipe_select)
         s_layout.addWidget(self.btn_swipe_solo)
         s_layout.addWidget(self.btn_swipe_del)
         self.swipe_container.hide()
@@ -690,7 +719,10 @@ class LayerRowWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def open_swipe(self):
-        w = 100
+        cfg = get_config()
+        if not cfg.enable_swipe_gesture:
+            return
+        w = 150
         h = max(20, self.height() - 2)
         y = 1
         if not hasattr(self, '_open_anim'):
@@ -707,7 +739,7 @@ class LayerRowWidget(QWidget):
     def close_swipe(self):
         if not hasattr(self, 'swipe_container') or not self.swipe_container.isVisible():
             return
-        w = 100
+        w = 150
         h = max(20, self.height() - 2)
         y = 1
         if not hasattr(self, '_close_anim'):
@@ -723,6 +755,98 @@ class LayerRowWidget(QWidget):
     def _on_close_anim_finished(self):
         if hasattr(self, 'swipe_container'):
             self.swipe_container.hide()
+
+    def _on_swipe_select_clicked(self):
+        self.close_swipe()
+        if not self.node:
+            return
+
+        from krita import Krita
+        doc = Krita.instance().activeDocument() if hasattr(Krita, 'instance') else None
+        if not doc:
+            return
+
+        doc.setActiveNode(self.node)
+        sel = doc.selection()
+        has_selection = (sel is not None and sel.width() > 0 and sel.height() > 0)
+
+        if not has_selection:
+            self._execute_selection_action("replace")
+        else:
+            self._show_selection_mode_menu()
+
+    def _show_selection_mode_menu(self):
+        t = get_theme()
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: {t.BG_BASE};
+                color: {t.TEXT_MAIN};
+                border: 1px solid {t.BORDER};
+                border-radius: 4px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 6px 14px;
+                border-radius: 3px;
+                font-size: 11px;
+                color: {t.TEXT_MAIN};
+            }}
+            QMenu::item:selected {{
+                background-color: rgba({t.ACCENT_RGB}, 0.22);
+                color: {t.ACCENT};
+            }}
+        """)
+
+        act_replace = QAction(get_lucide_icon("box-select", t.TEXT_MAIN, 12), "替换选区 (Replace)", menu)
+        act_add = QAction(get_lucide_icon("plus", t.TEXT_MAIN, 12), "添加选区 (Add)", menu)
+        act_sub = QAction(get_lucide_icon("minus", t.TEXT_MAIN, 12), "减去选区 (Subtract)", menu)
+        act_intersect = QAction(get_lucide_icon("intersect", t.TEXT_MAIN, 12), "交集选区 (Intersect)", menu)
+
+        act_replace.triggered.connect(lambda: self._execute_selection_action("replace"))
+        act_add.triggered.connect(lambda: self._execute_selection_action("add"))
+        act_sub.triggered.connect(lambda: self._execute_selection_action("subtract"))
+        act_intersect.triggered.connect(lambda: self._execute_selection_action("intersect"))
+
+        menu.addAction(act_replace)
+        menu.addAction(act_add)
+        menu.addAction(act_sub)
+        menu.addAction(act_intersect)
+
+        pos = QCursor.pos()
+        if hasattr(self, 'btn_swipe_select') and self.btn_swipe_select.isVisible():
+            pos = self.btn_swipe_select.mapToGlobal(QPoint(0, self.btn_swipe_select.height()))
+        menu.exec(pos)
+
+    def _execute_selection_action(self, mode="replace"):
+        if not self.node:
+            return
+        from krita import Krita
+        doc = Krita.instance().activeDocument() if hasattr(Krita, 'instance') else None
+        if not doc:
+            return
+
+        doc.setActiveNode(self.node)
+
+        action_map = {
+            "replace": ["selectopaque", "select_opaque"],
+            "add": ["selectopaque_add"],
+            "subtract": ["selectopaque_subtract"],
+            "intersect": ["selectopaque_intersect"],
+        }
+
+        names = action_map.get(mode, ["selectopaque", "select_opaque"])
+        executed = False
+        for name in names:
+            act = Krita.instance().action(name)
+            if act:
+                act.trigger()
+                executed = True
+                break
+
+        if executed and self.docker:
+            if hasattr(self.docker, 'refresh_canvas'):
+                self.docker.refresh_canvas(delay=0)
 
     def _on_swipe_solo_clicked(self):
         self.close_swipe()
