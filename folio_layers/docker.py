@@ -882,15 +882,17 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
     def _do_deferred_leave(self):
         global_pos = QCursor.pos()
-        if hasattr(self, 'tree') and self.tree:
-            vp_pos = self.tree.viewport().mapFromGlobal(global_pos)
-            if self.tree.viewport().rect().contains(vp_pos):
+        if hasattr(self, 'tree') and self.tree and self.tree.viewport():
+            # 计算视口在屏幕上的绝对 Rect，防转换误差误杀
+            vp_rect = QRect(self.tree.viewport().mapToGlobal(QPoint(0, 0)), self.tree.viewport().size())
+            if vp_rect.contains(global_pos):
                 return
         if hasattr(self, 'hover_preview') and self.hover_preview and self.hover_preview.isVisible():
             if self.hover_preview.geometry().contains(global_pos):
                 return
-        self.tree._hover_timer.stop()
-        self.tree._hover_item = None
+        if hasattr(self, 'tree') and self.tree:
+            self.tree._hover_timer.stop()
+            self.tree._hover_item = None
         self.reset_hover_state()
 
     def show_hover_preview(self, node, global_pos):
