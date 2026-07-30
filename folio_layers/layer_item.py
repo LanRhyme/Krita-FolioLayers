@@ -359,7 +359,7 @@ class LayerRowWidget(QWidget):
 
         self.type_icon.setVisible(show_type_icon)
         if show_type_icon:
-            icon_color = t.TEXT_MUTED if not vis else (t.ACCENT if is_group else t.TEXT_MAIN)
+            icon_color = t.ACCENT if is_soloed else (t.TEXT_MAIN if vis else t.TEXT_MUTED)
             self.type_icon.setPixmap(get_lucide_pixmap(type_info[2], icon_color, 14))
 
         self.expand_btn.setVisible(has_children)
