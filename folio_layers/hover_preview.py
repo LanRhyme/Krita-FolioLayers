@@ -48,6 +48,7 @@ class HoverPreviewPopup(QFrame):
         super().__init__(None, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.current_node_uid = None
 
         self.setFixedSize(260, 300)
@@ -241,26 +242,35 @@ class HoverPreviewPopup(QFrame):
         except Exception:
             self.inherit_alpha_badge.clear()
 
-    def popup_at(self, global_pos):
-        """在指定全局坐标位置安全显示（避开屏幕边缘）"""
+    def popup_at(self, global_pos, docker_widget=None):
+        """在指定全局坐标位置安全显示（避开图层面板与屏幕边缘）"""
         screen = QApplication.primaryScreen()
-        if screen:
-            geo = screen.availableGeometry()
-            x = global_pos.x() + 12
-            y = global_pos.y() - 40
+        geo = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
 
-            if x + self.width() > geo.right():
-                x = global_pos.x() - self.width() - 12
-            if y + self.height() > geo.bottom():
-                y = geo.bottom() - self.height() - 8
-            if y < geo.top():
-                y = geo.top() + 8
-
-            self.move(x, y)
+        if docker_widget and docker_widget.isVisible():
+            docker_left = docker_widget.mapToGlobal(QPoint(0, 0)).x()
+            docker_right = docker_widget.mapToGlobal(QPoint(docker_widget.width(), 0)).x()
+            
+            # 优先显示在图层面板左侧，无空间时则显示在右侧，彻底不遮挡图层列表与控件
+            if docker_left - geo.left() >= self.width() + 10:
+                x = docker_left - self.width() - 8
+            elif geo.right() - docker_right >= self.width() + 10:
+                x = docker_right + 8
+            else:
+                x = global_pos.x() + 16
         else:
-            self.move(global_pos.x() + 12, global_pos.y())
+            x = global_pos.x() + 16
 
-        # 如果已经在显示状态，只平移位置，绝不重新触发淡入动画（彻底消除闪烁与在缩略图上看不见的问题）
+        # 纵向随鼠标垂直居中，且不溢出屏幕边界
+        y = global_pos.y() - 50
+        if y + self.height() > geo.bottom():
+            y = geo.bottom() - self.height() - 8
+        if y < geo.top():
+            y = geo.top() + 8
+
+        self.move(x, y)
+
+        # 如果已经在显示状态，只平移位置，绝不重新触发淡入动画（彻底消除闪烁）
         if self.isVisible():
             self.raise_()
             return
@@ -270,7 +280,7 @@ class HoverPreviewPopup(QFrame):
         self.setGraphicsEffect(effect)
         
         anim = QPropertyAnimation(effect, b"opacity", self)
-        anim.setDuration(220)
+        anim.setDuration(180)
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
         anim.setEasingCurve(getattr(QEasingCurve, 'OutCubic', getattr(getattr(QEasingCurve, 'Type', None), 'OutCubic', 0)))
