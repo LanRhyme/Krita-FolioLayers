@@ -841,7 +841,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             self._leave_timer = QTimer(self)
             self._leave_timer.setSingleShot(True)
             self._leave_timer.timeout.connect(self._do_deferred_leave)
-        self._leave_timer.start(180)
+        self._leave_timer.start(1500)
 
     def _do_deferred_leave(self):
         global_pos = QCursor.pos()
