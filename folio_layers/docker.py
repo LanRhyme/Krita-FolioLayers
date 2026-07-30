@@ -632,7 +632,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
                 border: 1px solid transparent;
                 border-radius: 4px;
                 padding: 0px;
-                margin-bottom: 2px;
+                margin: 0px;
             }}
             QTreeWidget::item:hover {{
                 border: 1px solid rgba({t.ACCENT_RGB}, 0.35);

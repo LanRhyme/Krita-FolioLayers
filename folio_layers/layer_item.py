@@ -181,18 +181,18 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
-        # ====== 建立悬浮滑动操作面板 (iOS / Procreate 风格精致 24px 胶囊) ======
+        # ====== 建立悬浮滑动操作面板 (极简 Morandi 无边缝滑动层) ======
         self.swipe_container = QWidget(self)
         self.swipe_container.setObjectName("SwipeContainer")
         self.swipe_container.setStyleSheet(f"""
             QWidget#SwipeContainer {{
                 background-color: {t.BG_BASE};
                 border: 1px solid {t.BORDER};
-                border-radius: 12px;
+                border-radius: 4px;
             }}
         """)
         s_layout = QHBoxLayout(self.swipe_container)
-        s_layout.setContentsMargins(2, 1, 2, 1)
+        s_layout.setContentsMargins(1, 1, 1, 1)
         s_layout.setSpacing(2)
 
         btn_base_qss = f"""
@@ -200,8 +200,8 @@ class LayerRowWidget(QWidget):
                 background-color: transparent;
                 color: {t.TEXT_MAIN};
                 border: none;
-                border-radius: 10px;
-                font-size: 10px;
+                border-radius: 3px;
+                font-size: 11px;
                 font-weight: 500;
                 padding: 0px 2px;
             }}
@@ -716,13 +716,11 @@ class LayerRowWidget(QWidget):
             self.swipe_container.setGeometry(end_x, y, w, h)
 
     def _get_swipe_geometry(self):
-        w = 145
+        w = 165
         row_h = self.height()
-        # 精致 24px 胶囊尺寸
-        h = min(24, max(20, row_h - 4))
-        # 绝对精准的中轴对称垂直居中计算 (row_h - h) / 2
-        y = max(0, (row_h - h) // 2)
-        end_x = max(0, self.width() - w - 4)
+        h = max(20, row_h)
+        y = 0
+        end_x = max(0, self.width() - w)
         start_x = self.width()
         return start_x, end_x, y, w, h
 
