@@ -260,7 +260,12 @@ class HoverPreviewPopup(QFrame):
         else:
             self.move(global_pos.x() + 12, global_pos.y())
 
-        # 平滑淡入动画
+        # 如果已经在显示状态，只平移位置，绝不重新触发淡入动画（彻底消除闪烁与在缩略图上看不见的问题）
+        if self.isVisible():
+            self.raise_()
+            return
+
+        # 仅在首次弹出时播放淡入动画
         effect = QGraphicsOpacityEffect(self)
         self.setGraphicsEffect(effect)
         
