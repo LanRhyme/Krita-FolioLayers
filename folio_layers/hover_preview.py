@@ -196,10 +196,15 @@ class HoverPreviewPopup(QFrame):
         """)
         self.type_icon_label.setPixmap(get_lucide_pixmap(type_info[2], type_info[1], 16))
 
-        # 获取缩略图（投影模式，含蒙版/效果）
+        # 获取缩略图（优先提取 Krita 极速 Node 缩略图，后备投影）
         try:
-            pix = create_projection_thumbnail(node, 220, True)
-            if not pix.isNull():
+            pix = None
+            if hasattr(node, 'thumbnail'):
+                pix = node.thumbnail(180, 180)
+            if not pix or pix.isNull():
+                pix = create_projection_thumbnail(node, 180, True)
+
+            if pix and not pix.isNull():
                 scaled_pix = pix.scaled(
                     QSize(220, 170),
                     Qt.AspectRatioMode.KeepAspectRatio,

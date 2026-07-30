@@ -859,9 +859,16 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
         if item and item != getattr(self.tree, '_hover_item', None):
             self.tree._hover_item = item
+            self._hover_node = node
+            self._hover_global_pos = global_pos
+
             if getattr(self, '_hover_active', False) or self.hover_preview.isVisible():
-                # 悬停已激活状态：跨图层 0ms 瞬间无缝切换新图层预览！
-                self.show_hover_preview(node, global_pos)
+                # 悬停激活状态下：50ms 极速防抖切换，划过中间图层时 0 CPU 卡顿！
+                if not hasattr(self, '_switch_timer'):
+                    self._switch_timer = QTimer(self)
+                    self._switch_timer.setSingleShot(True)
+                    self._switch_timer.timeout.connect(self._do_switch_layer_preview)
+                self._switch_timer.start(50)
             else:
                 # 首次悬停新图层：启动 1000ms 定时器
                 self.tree._hover_timer.start(1000)
@@ -872,6 +879,11 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
                 pass
             elif not self.tree._hover_timer.isActive() and not getattr(self, '_hover_active', False):
                 self.tree._hover_timer.start(1000)
+
+    def _do_switch_layer_preview(self):
+        if hasattr(self, '_hover_node') and self._hover_node:
+            pos = getattr(self, '_hover_global_pos', QCursor.pos())
+            self.show_hover_preview(self._hover_node, pos)
 
     def _on_row_mouse_leave(self, row_widget):
         if not hasattr(self, '_leave_timer'):
