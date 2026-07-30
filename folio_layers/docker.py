@@ -845,14 +845,16 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
     def _do_deferred_leave(self):
         global_pos = QCursor.pos()
-        if hasattr(self, 'tree') and self.tree and self.tree.viewport():
-            # 计算视口在屏幕上的绝对 Rect，防转换误差误杀
-            vp_rect = QRect(self.tree.viewport().mapToGlobal(QPoint(0, 0)), self.tree.viewport().size())
-            if vp_rect.contains(global_pos):
+        # 1. 检查鼠标是否还在整个 Docker 面板区域内（含列表、滚动条、行间距）
+        if self.isVisible():
+            docker_rect = QRect(self.mapToGlobal(QPoint(0, 0)), self.size())
+            if docker_rect.contains(global_pos):
                 return
+        # 2. 检查鼠标是否在悬停预览浮窗本身上面
         if hasattr(self, 'hover_preview') and self.hover_preview and self.hover_preview.isVisible():
             if self.hover_preview.geometry().contains(global_pos):
                 return
+        # 3. 真正移出了 Docker 面板与浮窗外
         if hasattr(self, 'tree') and self.tree:
             self.tree._hover_timer.stop()
             self.tree._hover_item = None
