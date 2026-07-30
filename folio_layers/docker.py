@@ -60,59 +60,7 @@ class LayerTreeWidget(QTreeWidget):
         self._auto_scroll_timer.setInterval(16)
         self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
 
-    def _handle_hover_for_node(self, item, global_pos):
-        from .config import get_config
-        cfg = get_config()
-        if not cfg.enable_hover_preview:
-            return
-
-        if item:
-            w = self.itemWidget(item, 0)
-            if w and w.node:
-                if item != self._hover_item:
-                    self._hover_item = item
-                    if self.docker.hover_preview.isVisible() or getattr(self.docker, '_hover_active', False):
-                        # 处于预览激活状态，跨图层平滑无缝切换
-                        self.docker.show_hover_preview(w.node, global_pos)
-                    else:
-                        # 首次悬停新图层，启动 1000ms 定时器
-                        self._hover_timer.start(1000)
-                else:
-                    # 同图层内部移动 (无论光标在 40x40 缩略图、类型图标、名称还是底行上)
-                    if self.docker.hover_preview.isVisible():
-                        # 浮窗开启中：仅平滑跟随鼠标位置，绝不重新渲染更新 Node，彻底消除闪烁！
-                        self.docker.hover_preview.popup_at(global_pos)
-                    elif not self._hover_timer.isActive() and not getattr(self.docker, '_hover_active', False):
-                        # 浮窗未开启且定时器未启动：启动 1000ms 悬停定时器
-                        self._hover_timer.start(1000)
-                return
-        # 无有效 node
-        self._hover_timer.stop()
-        self._hover_item = None
-        self.docker.reset_hover_state()
-
     def eventFilter(self, obj, event):
-        # 拦截发往 LayerTreeWidget 及其内部所有子控件 (40x40 缩略图, 类型图标, 名字标签) 的鼠标事件
-        if isinstance(obj, QWidget) and (obj == self or obj == self.viewport() or self.isAncestorOf(obj)):
-            ev_type = event.type()
-            ev_mouse_move = getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None))
-            ev_enter = getattr(QEvent, 'Enter', getattr(getattr(QEvent, 'Type', None), 'Enter', None))
-            ev_leave = getattr(QEvent, 'Leave', getattr(getattr(QEvent, 'Type', None), 'Leave', None))
-
-            if ev_type in (ev_mouse_move, ev_enter):
-                global_pos = QCursor.pos()
-                vp_pos = self.viewport().mapFromGlobal(global_pos)
-                if self.viewport().rect().contains(vp_pos):
-                    item = self.itemAt(vp_pos)
-                    self._handle_hover_for_node(item, global_pos)
-            elif ev_type == ev_leave:
-                global_pos = QCursor.pos()
-                vp_pos = self.viewport().mapFromGlobal(global_pos)
-                if not self.viewport().rect().contains(vp_pos):
-                    self._hover_timer.stop()
-                    self._hover_item = None
-                    self.docker.reset_hover_state()
-
         return super().eventFilter(obj, event)
 
     def _on_hover_timeout(self):
@@ -856,28 +804,34 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
         item = getattr(row_widget, 'tree_item', None)
         node = getattr(row_widget, 'node', None)
+        if not node:
+            return
 
-        if item and item != getattr(self.tree, '_hover_item', None):
+        node_uid = str(node.uniqueId()) if hasattr(node, 'uniqueId') else str(id(node))
+        active_uid = getattr(self, '_active_hover_uid', None)
+
+        if node_uid != active_uid:
+            # 鼠标切换到了【新的图层项】
+            self._active_hover_uid = node_uid
             self.tree._hover_item = item
             self._hover_node = node
             self._hover_global_pos = global_pos
 
             if getattr(self, '_hover_active', False) or self.hover_preview.isVisible():
-                # 悬停激活状态下：50ms 极速防抖切换，划过中间图层时 0 CPU 卡顿！
                 if not hasattr(self, '_switch_timer'):
                     self._switch_timer = QTimer(self)
                     self._switch_timer.setSingleShot(True)
                     self._switch_timer.timeout.connect(self._do_switch_layer_preview)
                 self._switch_timer.start(50)
             else:
-                # 首次悬停新图层：启动 1000ms 定时器
                 self.tree._hover_timer.start(1000)
         else:
-            # 在同一图层内部移动 (无论是 40x40 缩略图、图标、名称还是底行)
-            if self.hover_preview.isVisible():
-                # 同图层内部移动：保持浮窗位置绝对固定，绝不平移/重新计算，彻底消除闪烁与抖动！
+            # 鼠标在【同一个图层项】上面移动 (无论经过 40x40 缩略图、图标、名字还是空白)
+            if self.hover_preview.isVisible() or getattr(self, '_hover_active', False):
+                # 浮窗已经在显示中：【绝对什么都不做！】
+                # 不重新渲染！不重新加载！不更新 QSS！不平移位置！彻底静止！
                 pass
-            elif not self.tree._hover_timer.isActive() and not getattr(self, '_hover_active', False):
+            elif not self.tree._hover_timer.isActive():
                 self.tree._hover_timer.start(1000)
 
     def _do_switch_layer_preview(self):
@@ -918,6 +872,7 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
     def reset_hover_state(self):
         """鼠标离开图层面板时重置悬停预览状态"""
         self._hover_active = False
+        self._active_hover_uid = None
         self.hover_preview.hide()
 
     def leaveEvent(self, event):
