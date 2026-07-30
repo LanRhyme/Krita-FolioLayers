@@ -818,11 +818,8 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
             self._hover_global_pos = global_pos
 
             if getattr(self, '_hover_active', False) or self.hover_preview.isVisible():
-                if not hasattr(self, '_switch_timer'):
-                    self._switch_timer = QTimer(self)
-                    self._switch_timer.setSingleShot(True)
-                    self._switch_timer.timeout.connect(self._do_switch_layer_preview)
-                self._switch_timer.start(50)
+                # 浮窗开启状态下：0ms 瞬间无缝切换新图层预览！
+                self.show_hover_preview(node, global_pos)
             else:
                 self.tree._hover_timer.start(1000)
         else:
