@@ -845,11 +845,58 @@ class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
 
 
     # ====== 悬停预览接口 ======
+    def _on_row_mouse_move(self, row_widget, global_pos):
+        from .config import get_config
+        cfg = get_config()
+        if not cfg.enable_hover_preview or not row_widget or not row_widget.node:
+            return
+
+        if hasattr(self, '_leave_timer'):
+            self._leave_timer.stop()
+
+        item = getattr(row_widget, 'tree_item', None)
+        node = getattr(row_widget, 'node', None)
+
+        if item and item != getattr(self.tree, '_hover_item', None):
+            self.tree._hover_item = item
+            if getattr(self, '_hover_active', False) or self.hover_preview.isVisible():
+                # 悬停激活状态下：跨图层 0ms 瞬间无缝切换新图层预览！
+                self.show_hover_preview(node, global_pos)
+            else:
+                # 首次悬停：启动 1000ms 定时器
+                self.tree._hover_timer.start(1000)
+        else:
+            # 在同一图层内部移动 (无论是 40x40 缩略图、图标、名称还是底行)
+            if self.hover_preview.isVisible():
+                # 浮窗显示中：仅平移位置，绝不重新渲染，0% 闪烁
+                self.hover_preview.popup_at(global_pos)
+            elif not self.tree._hover_timer.isActive() and not getattr(self, '_hover_active', False):
+                self.tree._hover_timer.start(1000)
+
+    def _on_row_mouse_leave(self, row_widget):
+        if not hasattr(self, '_leave_timer'):
+            self._leave_timer = QTimer(self)
+            self._leave_timer.setSingleShot(True)
+            self._leave_timer.timeout.connect(self._do_deferred_leave)
+        self._leave_timer.start(180)
+
+    def _do_deferred_leave(self):
+        global_pos = QCursor.pos()
+        if hasattr(self, 'tree') and self.tree:
+            vp_pos = self.tree.viewport().mapFromGlobal(global_pos)
+            if self.tree.viewport().rect().contains(vp_pos):
+                return
+        if hasattr(self, 'hover_preview') and self.hover_preview and self.hover_preview.isVisible():
+            if self.hover_preview.geometry().contains(global_pos):
+                return
+        self.tree._hover_timer.stop()
+        self.tree._hover_item = None
+        self.reset_hover_state()
+
     def show_hover_preview(self, node, global_pos):
         self._hover_active = True
         self.hover_preview.update_node(node, force=True)
         self.hover_preview.popup_at(global_pos)
-        self._hover_active = True
 
     def hide_hover_preview(self):
         self.hover_preview.hide()

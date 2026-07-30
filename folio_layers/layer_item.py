@@ -181,16 +181,17 @@ class LayerRowWidget(QWidget):
         self.pt_btn.clicked.connect(self._toggle_pass_through)
         layout.addWidget(self.pt_btn)
 
-        # 开启所有子控件鼠标跟踪，确保悬停在 40x40 缩略图和图层图标上时能 100% 触发事件
+        # 开启所有子控件鼠标跟踪，并挂载事件过滤器，精准捕获 40x40 缩略图、图标和名称上的移动事件
         self.setMouseTracking(True)
+        self.installEventFilter(self)
         for sub in (self.select_btn, self.color_bar, self.expand_btn, self.thumb_label,
                     self.type_icon, self.name_label, self.sub_info_widget,
                     self.blend_label, self.opacity_label, self.size_label):
             sub.setMouseTracking(True)
-            sub.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            sub.installEventFilter(self)
         if hasattr(self, 'indent_spacer') and self.indent_spacer:
             self.indent_spacer.setMouseTracking(True)
-            self.indent_spacer.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            self.indent_spacer.installEventFilter(self)
 
         # ====== 建立悬浮滑动操作面板 (极简 Morandi 无边缝滑动层) ======
         self.swipe_container = QWidget(self)
@@ -715,6 +716,21 @@ class LayerRowWidget(QWidget):
             elif dx > 30 and abs(dy) < 20:
                 self.close_swipe()
         super().mouseMoveEvent(event)
+
+    def eventFilter(self, obj, event):
+        ev_type = event.type()
+        ev_mouse_move = getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None))
+        ev_enter = getattr(QEvent, 'Enter', getattr(getattr(QEvent, 'Type', None), 'Enter', None))
+        ev_leave = getattr(QEvent, 'Leave', getattr(getattr(QEvent, 'Type', None), 'Leave', None))
+
+        if ev_type in (ev_mouse_move, ev_enter):
+            if self.docker and hasattr(self.docker, '_on_row_mouse_move'):
+                self.docker._on_row_mouse_move(self, QCursor.pos())
+        elif ev_type == ev_leave:
+            if self.docker and hasattr(self.docker, '_on_row_mouse_leave'):
+                self.docker._on_row_mouse_leave(self)
+
+        return super().eventFilter(obj, event)
 
     def mouseReleaseEvent(self, event):
         self._drag_start_pos = None
