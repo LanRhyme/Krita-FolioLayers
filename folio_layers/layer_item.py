@@ -192,9 +192,8 @@ class LayerRowWidget(QWidget):
             }}
         """)
         s_layout = QHBoxLayout(self.swipe_container)
-        s_layout.setContentsMargins(2, 2, 2, 2)
-        s_layout.setSpacing(3)
-        s_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        s_layout.setContentsMargins(1, 1, 1, 1)
+        s_layout.setSpacing(2)
 
         btn_base_qss = f"""
             QToolButton {{
@@ -202,9 +201,9 @@ class LayerRowWidget(QWidget):
                 color: {t.TEXT_MAIN};
                 border: none;
                 border-radius: 3px;
-                font-size: 10px;
+                font-size: 11px;
                 font-weight: 500;
-                padding: 1px 4px;
+                padding: 0px 4px;
             }}
         """
 
@@ -718,10 +717,9 @@ class LayerRowWidget(QWidget):
 
     def _get_swipe_geometry(self):
         w = 150
-        row_h = max(24, self.height())
-        # 自适应精确定位：高度限定在 24px-28px，垂直严格对齐中轴
-        h = max(22, min(26, row_h - 4))
-        y = max(0, (row_h - h) // 2)
+        row_h = max(20, self.height())
+        h = max(20, row_h - 2)
+        y = 1
         end_x = max(0, self.width() - w - 2)
         start_x = self.width()
         return start_x, end_x, y, w, h
