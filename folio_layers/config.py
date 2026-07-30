@@ -18,7 +18,7 @@ class LayerDockerConfig:
 
     @property
     def thumb_size(self) -> int:
-        return int(self.settings.value("thumb_size", 20))
+        return int(self.settings.value("thumb_size", 40))  # 默认改成 40x40 px
 
     @thumb_size.setter
     def thumb_size(self, val: int):
@@ -49,6 +49,24 @@ class LayerDockerConfig:
     @enable_hover_preview.setter
     def enable_hover_preview(self, val: bool):
         self.settings.setValue("enable_hover_preview", bool(val))
+
+    @property
+    def show_group_count(self) -> bool:
+        v = self.settings.value("show_group_count", True)
+        return str(v).lower() in ("true", "1")
+
+    @show_group_count.setter
+    def show_group_count(self, val: bool):
+        self.settings.setValue("show_group_count", bool(val))
+
+    @property
+    def enable_swipe_gesture(self) -> bool:
+        v = self.settings.value("enable_swipe_gesture", True)
+        return str(v).lower() in ("true", "1")
+
+    @enable_swipe_gesture.setter
+    def enable_swipe_gesture(self, val: bool):
+        self.settings.setValue("enable_swipe_gesture", bool(val))
 
     @property
     def solo_shortcut(self) -> str:

@@ -3,7 +3,7 @@
 
 from .qt_compat import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
-    QCheckBox, QSpinBox, Qt, QFont
+    QCheckBox, QSpinBox, Qt, QFont, QGroupBox
 )
 from .config import (
     get_config, DETAIL_NONE, DETAIL_COMPACT, DETAIL_BALANCED, DETAIL_DETAILED
@@ -11,18 +11,33 @@ from .config import (
 from .theme import get_theme
 
 class SettingsDialog(QDialog):
-    """图层面板设置与偏好对话框"""
+    """图层面板高级设置与偏好对话框"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Folio Layers 设置")
-        self.setFixedSize(320, 310)
+        self.setWindowTitle("Folio Layers 图层面板设置")
+        self.setFixedSize(360, 440)
 
         t = get_theme()
         self.setStyleSheet(f"""
             QDialog {{
                 background-color: {t.BG_BASE};
                 color: {t.TEXT_MAIN};
+            }}
+            QGroupBox {{
+                color: {t.TEXT_MAIN};
+                font-weight: bold;
+                font-size: 11px;
+                border: 1px solid {t.BORDER};
+                border-radius: 5px;
+                margin-top: 6px;
+                padding-top: 10px;
+            }}
+            QGroupBox::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+                background-color: {t.BG_BASE};
             }}
             QLabel {{
                 color: {t.TEXT_MAIN};
@@ -60,23 +75,33 @@ class SettingsDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
 
         cfg = get_config()
 
-        # 1. 缩略图尺寸
+        # 分组 1: 外观与尺寸
+        grp_visual = QGroupBox("外观与缩略图尺寸", self)
+        l_visual = QVBoxLayout(grp_visual)
+        l_visual.setSpacing(8)
+
         row1 = QHBoxLayout()
-        row1.addWidget(QLabel("图层预览图大小:"))
+        row1.addWidget(QLabel("图层缩略图大小:"))
         self.combo_size = QComboBox()
-        sizes = [("16 x 16 px", 16), ("20 x 20 px (默认)", 20), ("24 x 24 px", 24), ("32 x 32 px", 32), ("40 x 40 px", 40)]
+        sizes = [
+            ("20 x 20 px (极简小图)", 20),
+            ("28 x 28 px (紧凑)", 28),
+            ("32 x 32 px (中等)", 32),
+            ("40 x 40 px (默认高清大图)", 40),
+            ("48 x 48 px (大图)", 48),
+            ("64 x 64 px (超大图)", 64),
+        ]
         for label, val in sizes:
             self.combo_size.addItem(label, val)
             if val == cfg.thumb_size:
                 self.combo_size.setCurrentIndex(self.combo_size.count() - 1)
         row1.addWidget(self.combo_size, 1)
-        layout.addLayout(row1)
+        l_visual.addLayout(row1)
 
-        # 2. 图层项详细信息级别 (无、简洁、平衡、完整)
         row2 = QHBoxLayout()
         row2.addWidget(QLabel("图层信息显示级别:"))
         self.combo_detail = QComboBox()
@@ -91,9 +116,23 @@ class SettingsDialog(QDialog):
             if val == cfg.detail_level:
                 self.combo_detail.setCurrentIndex(self.combo_detail.count() - 1)
         row2.addWidget(self.combo_detail, 1)
-        layout.addLayout(row2)
+        l_visual.addLayout(row2)
 
-        # 3. 独显触发快捷键
+        self.check_grid = QCheckBox("图层透明区域显示棋盘格网格背景")
+        self.check_grid.setChecked(cfg.use_checkerboard)
+        l_visual.addWidget(self.check_grid)
+
+        self.check_group_count = QCheckBox("显示图层组内子图层数量标记 e.g. (3)")
+        self.check_group_count.setChecked(cfg.show_group_count)
+        l_visual.addWidget(self.check_group_count)
+
+        layout.addWidget(grp_visual)
+
+        # 分组 2: 交互与手势
+        grp_interaction = QGroupBox("交互与手势偏好", self)
+        l_inter = QVBoxLayout(grp_interaction)
+        l_inter.setSpacing(8)
+
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("独显眼睛按钮快捷键:"))
         self.combo_solo = QComboBox()
@@ -107,17 +146,17 @@ class SettingsDialog(QDialog):
             if val == cfg.solo_shortcut:
                 self.combo_solo.setCurrentIndex(self.combo_solo.count() - 1)
         row3.addWidget(self.combo_solo, 1)
-        layout.addLayout(row3)
+        l_inter.addLayout(row3)
 
-        # 4. 网格图棋盘格透明显示
-        self.check_grid = QCheckBox("图层透明区域显示网格图(棋盘格)")
-        self.check_grid.setChecked(cfg.use_checkerboard)
-        layout.addWidget(self.check_grid)
-
-        # 5. 启用悬停浮窗预览
         self.check_hover = QCheckBox("启用鼠标悬停大图浮窗预览")
         self.check_hover.setChecked(cfg.enable_hover_preview)
-        layout.addWidget(self.check_hover)
+        l_inter.addWidget(self.check_hover)
+
+        self.check_swipe = QCheckBox("启用向左滑动显露独显/删除功能快捷面板")
+        self.check_swipe.setChecked(cfg.enable_swipe_gesture)
+        l_inter.addWidget(self.check_swipe)
+
+        layout.addWidget(grp_interaction)
 
         layout.addStretch()
 
@@ -143,4 +182,6 @@ class SettingsDialog(QDialog):
         cfg.solo_shortcut = self.combo_solo.currentData()
         cfg.use_checkerboard = self.check_grid.isChecked()
         cfg.enable_hover_preview = self.check_hover.isChecked()
+        cfg.show_group_count = self.check_group_count.isChecked()
+        cfg.enable_swipe_gesture = self.check_swipe.isChecked()
         self.accept()
