@@ -194,6 +194,7 @@ class LayerRowWidget(QWidget):
         s_layout = QHBoxLayout(self.swipe_container)
         s_layout.setContentsMargins(2, 2, 2, 2)
         s_layout.setSpacing(3)
+        s_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         btn_base_qss = f"""
             QToolButton {{
@@ -709,13 +710,27 @@ class LayerRowWidget(QWidget):
         self._drag_start_pos = None
         super().mouseReleaseEvent(event)
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'swipe_container') and self.swipe_container.isVisible():
+            start_x, end_x, y, w, h = self._get_swipe_geometry()
+            self.swipe_container.setGeometry(end_x, y, w, h)
+
+    def _get_swipe_geometry(self):
+        w = 150
+        row_h = max(24, self.height())
+        # 自适应精确定位：高度限定在 24px-28px，垂直严格对齐中轴
+        h = max(22, min(26, row_h - 4))
+        y = max(0, (row_h - h) // 2)
+        end_x = max(0, self.width() - w - 2)
+        start_x = self.width()
+        return start_x, end_x, y, w, h
+
     def open_swipe(self):
         cfg = get_config()
         if not cfg.enable_swipe_gesture:
             return
-        w = 150
-        h = max(20, self.height() - 2)
-        y = 1
+        start_x, end_x, y, w, h = self._get_swipe_geometry()
         if not hasattr(self, '_open_anim'):
             self._open_anim = QPropertyAnimation(self.swipe_container, b"geometry")
             self._open_anim.setDuration(160)
@@ -723,24 +738,22 @@ class LayerRowWidget(QWidget):
         self.swipe_container.show()
         self.swipe_container.raise_()
         self._open_anim.stop()
-        self._open_anim.setStartValue(QRect(self.width(), y, w, h))
-        self._open_anim.setEndValue(QRect(self.width() - w - 2, y, w, h))
+        self._open_anim.setStartValue(QRect(start_x, y, w, h))
+        self._open_anim.setEndValue(QRect(end_x, y, w, h))
         self._open_anim.start()
 
     def close_swipe(self):
         if not hasattr(self, 'swipe_container') or not self.swipe_container.isVisible():
             return
-        w = 150
-        h = max(20, self.height() - 2)
-        y = 1
+        start_x, end_x, y, w, h = self._get_swipe_geometry()
         if not hasattr(self, '_close_anim'):
             self._close_anim = QPropertyAnimation(self.swipe_container, b"geometry")
             self._close_anim.setDuration(120)
             self._close_anim.finished.connect(self._on_close_anim_finished)
 
         self._close_anim.stop()
-        self._close_anim.setStartValue(QRect(self.width() - w - 2, y, w, h))
-        self._close_anim.setEndValue(QRect(self.width(), y, w, h))
+        self._close_anim.setStartValue(QRect(end_x, y, w, h))
+        self._close_anim.setEndValue(QRect(start_x, y, w, h))
         self._close_anim.start()
 
     def _on_close_anim_finished(self):
