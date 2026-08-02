@@ -12,12 +12,12 @@ try:
 
     Application = Krita.instance()
     try:
-        dock_position = DockWidgetFactoryBase.DockRight
+        dock_position = DockWidgetFactoryBase.DockBottom
     except AttributeError:
         try:
-            dock_position = DockWidgetFactoryBase.DockPosition.DockRight
+            dock_position = DockWidgetFactoryBase.DockPosition.DockBottom
         except AttributeError:
-            dock_position = 1
+            dock_position = 2
 
     Application.addDockWidgetFactory(
         DockWidgetFactory(
