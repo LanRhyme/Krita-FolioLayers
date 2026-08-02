@@ -43,8 +43,8 @@ def _find_lib():
 
     for name in lib_names:
         candidates.append(os.path.join(here, name))
-        candidates.append(os.path.expanduser(f"~/.local/share/krita/pykrita/lucide_layer_docker/{name}"))
-        candidates.append(os.path.expandvars(f"%APPDATA%/krita/pykrita/lucide_layer_docker/{name}"))
+        candidates.append(os.path.expanduser(f"~/.local/share/krita/pykrita/folio_layers/{name}"))
+        candidates.append(os.path.expandvars(f"%APPDATA%/krita/pykrita/folio_layers/{name}"))
 
     for p in candidates:
         if os.path.isfile(p):
