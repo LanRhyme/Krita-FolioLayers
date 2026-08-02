@@ -2,6 +2,7 @@
 """Folio Layer Docker - Native Qt Integration, Clean Dropdowns & Full Blending Modes"""
 
 import sys
+import time
 from collections import OrderedDict
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
@@ -60,6 +61,18 @@ class LayerTreeWidget(QTreeWidget):
         self._auto_scroll_timer = QTimer(self)
         self._auto_scroll_timer.setInterval(16)
         self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
+
+        # 记录滚动时间戳：滚动期间抑制 hover 预览，避免弹窗干扰滚动
+        self.verticalScrollBar().valueChanged.connect(self._on_scrolled)
+        self.horizontalScrollBar().valueChanged.connect(self._on_scrolled)
+
+    def _on_scrolled(self, *args):
+        """滚动发生时记录时间戳，用于滚动期间抑制 hover 预览"""
+        self.docker._last_scroll_ts = time.monotonic()
+
+    def wheelEvent(self, event):
+        self.docker._last_scroll_ts = time.monotonic()
+        super().wheelEvent(event)
 
     def eventFilter(self, obj, event):
         if obj == self.viewport():
@@ -441,6 +454,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(0) # 缩进由 LayerRowWidget 内部接管，保证左侧对齐
         self.tree.setAnimated(True)
+        self.tree.setUniformRowHeights(True) # 行高固定时启用统一行高，大幅提升滚动性能
         self.tree.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._show_context_menu)
@@ -835,6 +849,10 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
     # ====== 悬停预览接口 ======
     def _on_row_mouse_move(self, row_widget, global_pos):
+        # 滚动进行中或刚结束（250ms 内）：抑制 hover 预览触发，保证滚动流畅
+        if time.monotonic() - getattr(self, '_last_scroll_ts', 0.0) < 0.25:
+            self.tree._hover_timer.stop()
+            return
         from .config import get_config
         cfg = get_config()
         if not cfg.enable_hover_preview or not row_widget or not row_widget.node:
