@@ -1,6 +1,7 @@
 # Krita Folio Layers
 
 Folio 风格图层管理 Docker，原生 Lucide 图标、分类混合模式、拖拽排序，内置 C++ 原生投影缩略图引擎
+![Screenshot](https://raw.githubusercontent.com/LanRhyme/Krita-FolioLayers/main/screenshot.png)
 
 ## 功能特性
 
