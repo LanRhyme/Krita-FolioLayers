@@ -21,10 +21,21 @@ _LIB = None
 _LIB_TRIED = False
 
 
+def _qt_major():
+    try:
+        from PyQt6.QtCore import QT_VERSION_STR
+        return 6
+    except ImportError:
+        return 5
+
+
 def _find_lib():
     candidates = []
     here = os.path.dirname(os.path.abspath(__file__))
+    qt = _qt_major()
     lib_names = [
+        "libfolio_projthumb_qt%d.so" % qt,
+        "libfolio_projthumb_qt%d.dll" % qt,
         "libfolio_projthumb.so",
         "libfolio_projthumb.dll",
         "folio_projthumb.dll",
