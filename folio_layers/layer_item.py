@@ -57,6 +57,7 @@ class LayerRowWidget(QWidget):
         self._thumb_timer.setInterval(80)
         self._thumb_timer.timeout.connect(self._load_thumbnail)
         self._last_thumb_visible = None  # 缓存缩略图对应的可见性，用于检测可见性变化
+        self._thumb_generated_ts = 0.0  # 最近一次缩略图生成时间，用于周期性懒更新兜底
 
         cfg = get_config()
         t = get_theme()
@@ -583,6 +584,7 @@ class LayerRowWidget(QWidget):
                 while len(cache) > 256:
                     cache.popitem(last=False)
             self._last_thumb_visible = self.node.visible()
+            self._thumb_generated_ts = time.monotonic()
             self.thumb_label.setPixmap(final)
         except Exception:
             self.thumb_label.clear()

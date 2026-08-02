@@ -528,8 +528,11 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
             try:
                 notifier = Krita.instance().notifier()
                 notifier.imageCreated.connect(self._on_image_created)
-                notifier.activeViewChanged.connect(self._on_view_changed)
-                notifier.imageModified.connect(self._on_image_modified)
+                # 防御性连接：Krita 6 的 Notifier 无 activeViewChanged/imageModified 信号
+                if hasattr(notifier, 'activeViewChanged'):
+                    notifier.activeViewChanged.connect(self._on_view_changed)
+                if hasattr(notifier, 'imageModified'):
+                    notifier.imageModified.connect(self._on_image_modified)
             except Exception:
                 pass
 
@@ -1182,6 +1185,20 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
             self._update_property_bar_for_node(curr_node)
 
         self.refresh_tree()
+        self._lazy_refresh_stale_thumbs()
+
+    def _lazy_refresh_stale_thumbs(self):
+        """周期兜底：可见项缩略图生成超过 3s 则重载（Krita 6 无内容修改信号，靠此保证更新）"""
+        now = time.monotonic()
+        def _check(item):
+            w = self.tree.itemWidget(item, 0)
+            if w and w.node and w._is_tree_visible():
+                if now - getattr(w, '_thumb_generated_ts', 0.0) > 3.0:
+                    w._thumb_timer.start()
+            for i in range(item.childCount()):
+                _check(item.child(i))
+        for i in range(self.tree.topLevelItemCount()):
+            _check(self.tree.topLevelItem(i))
 
     # ====== 属性事件 ======
     def _on_item_expanded(self, item):
