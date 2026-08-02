@@ -8,7 +8,7 @@ from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
     Qt, QSize, QRect, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
-    QEvent, QPainter, QPen, QPoint
+    QEvent, QPainter, QPen, QPoint, QPropertyAnimation, QEasingCurve
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
@@ -61,6 +61,7 @@ class LayerTreeWidget(QTreeWidget):
         self._auto_scroll_timer = QTimer(self)
         self._auto_scroll_timer.setInterval(16)
         self._auto_scroll_timer.timeout.connect(self._do_auto_scroll)
+        self._scroll_anim = None  # 滚轮平滑滚动动画
 
         # 记录滚动时间戳：滚动期间抑制 hover 预览，避免弹窗干扰滚动
         self.verticalScrollBar().valueChanged.connect(self._on_scrolled)
@@ -70,9 +71,47 @@ class LayerTreeWidget(QTreeWidget):
         """滚动发生时记录时间戳，用于滚动期间抑制 hover 预览"""
         self.docker._last_scroll_ts = time.monotonic()
 
+    def _scroll_to(self, target):
+        """平滑滚动到目标位置（OutCubic 缓动，约 160ms）"""
+        sb = self.verticalScrollBar()
+        if self._scroll_anim is not None:
+            self._scroll_anim.stop()
+            self._scroll_anim = None
+        target = max(0, min(sb.maximum(), int(target)))
+        if target == sb.value():
+            return
+        try:
+            ease = QEasingCurve.Type.OutCubic
+        except AttributeError:
+            ease = QEasingCurve.OutCubic
+        anim = QPropertyAnimation(sb, b"value", self)
+        anim.setDuration(160)
+        anim.setStartValue(float(sb.value()))
+        anim.setEndValue(float(target))
+        anim.setEasingCurve(ease)
+        def _done():
+            if self._scroll_anim is anim:
+                self._scroll_anim = None
+        anim.finished.connect(_done)
+        self._scroll_anim = anim
+        anim.start()
+
     def wheelEvent(self, event):
         self.docker._last_scroll_ts = time.monotonic()
-        super().wheelEvent(event)
+        angle = event.angleDelta().y() if hasattr(event, 'angleDelta') else 0
+        if angle != 0:
+            # 滚轮：平滑动画滚动（每格约 3 行，与 Qt 默认一致）
+            row_h = 30
+            it = self.topLevelItem(0) if self.topLevelItemCount() > 0 else None
+            if it is not None:
+                s = it.sizeHint(0)
+                if s.isValid() and s.height() > 0:
+                    row_h = s.height()
+            sb = self.verticalScrollBar()
+            self._scroll_to(sb.value() + (-angle / 120.0) * 3 * row_h)
+        else:
+            # 触摸板：原生像素滚动（已平滑）
+            super().wheelEvent(event)
 
     def eventFilter(self, obj, event):
         if obj == self.viewport():
