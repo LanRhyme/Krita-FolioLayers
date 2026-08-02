@@ -55,6 +55,7 @@ class LayerRowWidget(QWidget):
         self._thumb_timer.setSingleShot(True)
         self._thumb_timer.setInterval(80)
         self._thumb_timer.timeout.connect(self._load_thumbnail)
+        self._last_thumb_visible = None  # 缓存缩略图对应的可见性，用于检测可见性变化
 
         cfg = get_config()
         t = get_theme()
@@ -336,7 +337,7 @@ class LayerRowWidget(QWidget):
             p = p.parent()
         return d
 
-    def refresh_state(self):
+    def refresh_state(self, force_thumb=False):
         """完全遵循 Krita 官方平衡与完整模式下的文字显示逻辑"""
         if not self.node:
             return
@@ -503,13 +504,15 @@ class LayerRowWidget(QWidget):
         except Exception:
             self.inherit_alpha_btn.hide()
 
-# 尝试从缓存中立即加载旧的缩略图以消除闪烁
+    # 尝试从缓存中立即加载旧的缩略图以消除闪烁
         uid = str(self.node.uniqueId())
-        if hasattr(self.docker, 'thumbnail_cache') and uid in self.docker.thumbnail_cache:
-            self.thumb_label.setPixmap(self.docker.thumbnail_cache[uid])
-
-        # 启动定时器以后台更新最新缩略图
-        self._thumb_timer.start()
+        cache = getattr(self.docker, 'thumbnail_cache', None)
+        if cache is not None and uid in cache:
+            self.thumb_label.setPixmap(cache[uid])
+        # 仅当无缓存、可见性变化或强制刷新时才重新生成缩略图，避免轮询全量重载
+        cache_hit = (cache is not None and uid in cache and self._last_thumb_visible == vis)
+        if force_thumb or not cache_hit:
+            self._thumb_timer.start()
 
         # 隐藏图层时整体降低不透明度（文本调色 + 缩略图叠加半透明遮罩）
         if not vis:
@@ -526,6 +529,10 @@ class LayerRowWidget(QWidget):
             self.blend_label.setStyleSheet(restored_sub)
             self.opacity_label.setStyleSheet(restored_sub)
             self.size_label.setStyleSheet(restored_sub)
+
+    def refresh_state_with_thumb(self, needs_thumb):
+        """同步状态；内容变化由 imageModified 节流驱动，轮询同步不强制重载缩略图"""
+        self.refresh_state(force_thumb=False)
 
     def _is_tree_visible(self):
         """检查此项是否在树中可见（所有父组都已展开）"""
@@ -561,9 +568,17 @@ class LayerRowWidget(QWidget):
                 dp.setOpacity(0.35)
                 dp.drawPixmap(0, 0, pix)
                 dp.end()
-                self.thumb_label.setPixmap(dimmed)
+                final = dimmed
             else:
-                self.thumb_label.setPixmap(pix)
+                final = pix
+            # 写入 docker 缓存（供 refresh_state 与 hover 预览复用），并限制容量
+            cache = getattr(self.docker, 'thumbnail_cache', None)
+            if cache is not None:
+                cache[str(self.node.uniqueId())] = final
+                while len(cache) > 256:
+                    cache.popitem(last=False)
+            self._last_thumb_visible = self.node.visible()
+            self.thumb_label.setPixmap(final)
         except Exception:
             self.thumb_label.clear()
 

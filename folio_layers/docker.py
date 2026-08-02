@@ -2,6 +2,7 @@
 """Folio Layer Docker - Native Qt Integration, Clean Dropdowns & Full Blending Modes"""
 
 import sys
+from collections import OrderedDict
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
@@ -435,7 +436,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         main_layout.addWidget(self.search_input)
 
         # 4. 图层树形列表 (使用支持拖拽排序的自定义 TreeWidget)
-        self.thumbnail_cache = {}
+        self.thumbnail_cache = OrderedDict()
         self.tree = LayerTreeWidget(self)
         self.tree.setHeaderHidden(True)
         self.tree.setIndentation(0) # 缩进由 LayerRowWidget 内部接管，保证左侧对齐
@@ -464,11 +465,18 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.sync_timer.timeout.connect(self._sync_with_krita)
         self.sync_timer.start()
 
+        # 内容变化节流：作画/编辑图像时批量刷新缩略图，避免 600ms 轮询全量重载
+        self._content_flush_timer = QTimer(self)
+        self._content_flush_timer.setSingleShot(True)
+        self._content_flush_timer.setInterval(300)
+        self._content_flush_timer.timeout.connect(self._flush_thumbnails)
+
         if IN_KRITA:
             try:
                 notifier = Krita.instance().notifier()
                 notifier.imageCreated.connect(self._on_image_created)
                 notifier.activeViewChanged.connect(self._on_view_changed)
+                notifier.imageModified.connect(self._on_image_modified)
             except Exception:
                 pass
 
@@ -487,6 +495,26 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
         for i in range(self.tree.topLevelItemCount()):
             _update(self.tree.topLevelItem(i))
+
+    def _on_image_modified(self, *args):
+        """图像内容变化（作画/编辑）→ 节流批量刷新缩略图，避免轮询全量重载"""
+        if self._loading:
+            return
+        self._content_flush_timer.start()
+
+    def _flush_thumbnails(self):
+        """内容变化节流到期：所有可见项重启缩略图定时器，覆盖更新缓存"""
+        if self._updating_ui:
+            self._content_flush_timer.start()
+            return
+        def _touch(item):
+            w = self.tree.itemWidget(item, 0)
+            if w and w.node and w._is_tree_visible():
+                w._thumb_timer.start()
+            for i in range(item.childCount()):
+                _touch(item.child(i))
+        for i in range(self.tree.topLevelItemCount()):
+            _touch(self.tree.topLevelItem(i))
 
     def _on_image_created(self, *args):
         """Krita 创建/加载新图像时进入批处理模式，暂停同步以避免阻塞主线程"""
