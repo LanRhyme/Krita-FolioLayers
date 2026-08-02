@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Flexible Layer Row Widget with Opacity & Blending Text (Official Layout Style)"""
 
+import time
 from .qt_compat import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QToolButton, QPushButton, QLineEdit,
     Qt, QSize, QPixmap, QColor, QFont, QTimer, QCursor, QMenu, QAction, QEvent,
@@ -547,6 +548,10 @@ class LayerRowWidget(QWidget):
     def _load_thumbnail(self):
         """实际加载缩略图（由 _thumb_timer 延迟触发，避免建树/刷新时同步阻塞）"""
         if not self.node:
+            return
+        # 滚动进行中：延迟生成，避免打断滚动帧
+        if time.monotonic() - getattr(self.docker, '_last_scroll_ts', 0.0) < 0.15:
+            self._thumb_timer.start(120)
             return
         # 折叠组内的子项不加载缩略图，等展开时再加载
         if not self._is_tree_visible():

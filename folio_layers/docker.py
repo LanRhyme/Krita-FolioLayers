@@ -521,6 +521,10 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         if self._updating_ui:
             self._content_flush_timer.start()
             return
+        # 滚动中：推迟到滚动结束后再刷新缩略图
+        if time.monotonic() - getattr(self, '_last_scroll_ts', 0.0) < 0.5:
+            self._content_flush_timer.start(300)
+            return
         # 同步清空悬停大图缓存，下次悬停生成最新内容
         self.hover_preview.clear_cache()
         def _touch(item):
@@ -1122,6 +1126,9 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
     def _sync_with_krita(self):
         if not IN_KRITA or self._updating_ui or self._loading:
+            return
+        # 滚动进行中或刚结束：跳过轮询同步，避免周期性全量刷新打断滚动
+        if time.monotonic() - getattr(self, '_last_scroll_ts', 0.0) < 0.5:
             return
         buttons = QApplication.mouseButtons()
         no_btn = getattr(Qt, 'NoButton', getattr(getattr(Qt, 'MouseButton', None), 'NoButton', 0))
