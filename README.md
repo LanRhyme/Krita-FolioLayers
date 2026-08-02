@@ -31,7 +31,7 @@ Folio 风格图层管理 Docker，原生 Lucide 图标、分类混合模式、�
 
 ```bash
 cp -r folio_layers ~/.local/share/krita/pykrita/
-cp krita_folio_layers.desktop ~/.local/share/krita/pykrita/folio_layers.desktop
+cp folio_layers.desktop ~/.local/share/krita/pykrita/folio_layers.desktop
 ```
 
 重启 Krita，进入 设置 → 配置 Krita → Python 插件管理器，勾选 **Folio Layers**
@@ -39,14 +39,14 @@ cp krita_folio_layers.desktop ~/.local/share/krita/pykrita/folio_layers.desktop
 ### Windows
 
 1. 将 `folio_layers` 文件夹复制到 `%APPDATA%\krita\pykrita\`
-2. 将 `krita_folio_layers.desktop` 复制为 `%APPDATA%\krita\pykrita\folio_layers.desktop`
+2. 将 `folio_layers.desktop` 复制为 `%APPDATA%\krita\pykrita\folio_layers.desktop`
 3. 重启 Krita 并启用 **Folio Layers**
 
 ## 目录结构
 
 - `folio_layers`：插件核心源码，内含预编译 `libfolio_projthumb.so` / `libfolio_projthumb*.dll`
 - `native`：C++ 投影引擎源码、Krita 兼容头文件与构建脚本（`build.sh`）
-- `krita_folio_layers.desktop`：插件元数据清单，安装时复制为 `folio_layers.desktop`
+- `folio_layers.desktop`：插件元数据清单，安装时复制为 `folio_layers.desktop`
 - `LICENSE`：GPL-3.0
 
 ## 手动编译原生引擎（可选）
