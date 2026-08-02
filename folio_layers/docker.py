@@ -1188,17 +1188,23 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self._lazy_refresh_stale_thumbs()
 
     def _lazy_refresh_stale_thumbs(self):
-        """周期兜底：可见项缩略图生成超过 3s 则重载（Krita 6 无内容修改信号，靠此保证更新）"""
+        """周期兜底：可见项缩略图生成超过 1s 则重载（Krita 6 无内容修改信号，靠此保证更新）"""
         now = time.monotonic()
+        stale = False
         def _check(item):
+            nonlocal stale
             w = self.tree.itemWidget(item, 0)
             if w and w.node and w._is_tree_visible():
-                if now - getattr(w, '_thumb_generated_ts', 0.0) > 3.0:
+                if now - getattr(w, '_thumb_generated_ts', 0.0) > 1.0:
+                    stale = True
                     w._thumb_timer.start()
             for i in range(item.childCount()):
                 _check(item.child(i))
         for i in range(self.tree.topLevelItemCount()):
             _check(self.tree.topLevelItem(i))
+        if stale:
+            # 行缩略图更新时同步失效悬停大图缓存，保证悬停预览同样更新
+            self.hover_preview.clear_cache()
 
     # ====== 属性事件 ======
     def _on_item_expanded(self, item):
