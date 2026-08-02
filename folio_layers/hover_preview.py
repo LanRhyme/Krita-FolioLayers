@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Hover Floating Window Preview Component - Dynamic Krita Palette"""
 
+from collections import OrderedDict
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, Qt, QPixmap, QColor,
     QFont, QPoint, QGraphicsDropShadowEffect, QSize, QRect, QApplication,
@@ -50,6 +51,8 @@ class HoverPreviewPopup(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.current_node_uid = None
+        # 220px 悬停大图缓存：避免放大列表小缩略图导致模糊，内容变化时由 docker 清空
+        self._big_cache = OrderedDict()
 
         self.setFixedSize(260, 300)
 
@@ -195,14 +198,17 @@ class HoverPreviewPopup(QFrame):
         """)
         self.type_icon_label.setPixmap(get_lucide_pixmap(type_info[2], type_info[1], 16))
 
-        # 获取缩略图（优先从 docker_widget.thumbnail_cache 提取 0.01ms 极速缓存图）
+        # 获取 220px 大图（优先自身大图缓存，绝不放大列表小缩略图）
         try:
             pix = None
-            if docker_widget and hasattr(docker_widget, 'thumbnail_cache') and uid in docker_widget.thumbnail_cache:
-                pix = docker_widget.thumbnail_cache[uid]
-
+            if not force:
+                pix = self._big_cache.get(uid)
             if not pix or pix.isNull():
                 pix = create_projection_thumbnail(node, 220, True)
+                if pix and not pix.isNull():
+                    self._big_cache[uid] = pix
+                    while len(self._big_cache) > 24:
+                        self._big_cache.popitem(last=False)
 
             if pix and not pix.isNull():
                 scaled_pix = pix.scaled(
@@ -250,6 +256,11 @@ class HoverPreviewPopup(QFrame):
         # 强制更新重绘，确保浮窗已开启时跨图层瞬间刷新画面
         self.card.update()
         self.update()
+
+    def clear_cache(self):
+        """内容变化时清空大图缓存并复位当前节点，下次悬停重新生成"""
+        self._big_cache.clear()
+        self.current_node_uid = None
 
     def popup_at(self, global_pos, docker_widget=None):
         """在指定全局坐标位置安全显示（避开图层面板与屏幕边缘）"""

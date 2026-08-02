@@ -507,6 +507,8 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         if self._updating_ui:
             self._content_flush_timer.start()
             return
+        # 同步清空悬停大图缓存，下次悬停生成最新内容
+        self.hover_preview.clear_cache()
         def _touch(item):
             w = self.tree.itemWidget(item, 0)
             if w and w.node and w._is_tree_visible():
@@ -902,7 +904,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
     def show_hover_preview(self, node, global_pos):
         self._hover_active = True
-        self.hover_preview.update_node(node, force=True, docker_widget=self)
+        self.hover_preview.update_node(node, force=False, docker_widget=self)
         self.hover_preview.popup_at(global_pos, docker_widget=self)
         if not self.hover_preview.isVisible():
             self.hover_preview.show()
