@@ -1,6 +1,6 @@
 # Krita Folio Layers
 
-A Folio-style layer panel Docker for Krita, with native Lucide icons, categorized blending modes, and drag-and-drop layer sorting
+Folio 风格图层管理 Docker，原生 Lucide 图标、分类混合模式、拖拽排序，内置 C++ 原生投影缩略图引擎
 
 ## 功能特性
 
@@ -10,19 +10,54 @@ A Folio-style layer panel Docker for Krita, with native Lucide icons, categorize
 - **颜色标记与不透明度**：横向 8 色标签色块选择器，原生不透明度条
 - **图层树工具**：独显隔离、归组包裹、重命名、合并、拼合、栅格化
 - **搜索筛选**：按图层名称快速过滤
-- **悬停缩略图预览**
+- **悬停缩略图预览**：C++ 原生投影引擎渲染，缩略图与左侧层缩略图 100% 对齐
 - **莫兰迪主题适配**：通过外部主题引擎动态注入配色
 
-## 兼容性说明
+## 兼容性
 
-本插件为纯 Python 实现，兼容 **Krita 5.0 及以上版本**（支持 PyQt5 与 PyQt6 双引擎环境），跨平台运行
+| 操作系统 | Krita | Qt | 状态 |
+| ---------- | ------- | ----- | ------ |
+| Linux x86_64 | 5.x / 6.x | Qt5 / Qt6 | 完全支持，含预编译 `.so` |
+| Windows x64 | 5.x / 6.x | Qt5 / Qt6 | 完全支持，含预编译 `.dll` |
+
+插件本体为 Python 实现，兼容 Krita 5.0 及以上版本（PyQt5 / PyQt6 双引擎），跨平台运行
+投影引擎为 C++ 预编译二进制，加载失败时自动回退纯 Python 模式
+
+## 安装
+
+### Linux
+
+```bash
+cp -r folio_layers ~/.local/share/krita/pykrita/
+cp krita_folio_layers.desktop ~/.local/share/krita/pykrita/folio_layers.desktop
+```
+
+重启 Krita，进入 设置 → 配置 Krita → Python 插件管理器，勾选 **Folio Layers**
+
+### Windows
+
+1. 将 `folio_layers` 文件夹复制到 `%APPDATA%\krita\pykrita\`
+2. 将 `krita_folio_layers.desktop` 复制为 `%APPDATA%\krita\pykrita\folio_layers.desktop`
+3. 重启 Krita 并启用 **Folio Layers**
 
 ## 目录结构
 
-- `folio_layers`: 插件核心源码目录
-- `folio_layers.desktop`: 插件元数据清单
+- `folio_layers`：插件核心源码，内含预编译 `libfolio_projthumb.so` / `libfolio_projthumb*.dll`
+- `native`：C++ 投影引擎源码、Krita 兼容头文件与构建脚本（`build.sh`）
+- `krita_folio_layers.desktop`：插件元数据清单，安装时复制为 `folio_layers.desktop`
+- `LICENSE`：GPL-3.0
 
-## 版权与许可 (Copyright & License)
+## 手动编译原生引擎（可选）
+
+预编译二进制与运行时 Krita / Qt 不兼容时，可自行编译
+
+```bash
+bash native/build.sh
+```
+
+产物输出至 `native/build/libfolio_projthumb.so`，复制到 `folio_layers/` 即可
+
+## 版权与许可
 
 Copyright (C) 2026 LanRhyme
 GNU General Public License version 3

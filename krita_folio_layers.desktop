@@ -4,4 +4,4 @@ ServiceTypes=Krita/PythonPlugin
 X-KDE-Library=folio_layers
 X-Python-2-Compatible=false
 Name=Folio Layers
-Comment=Krita 图层管理 Docker 插件
+Comment=Folio 风格图层管理 Docker：全功能图层管理、分类混合模式、拖拽排序、悬停缩略图、莫兰迪主题
