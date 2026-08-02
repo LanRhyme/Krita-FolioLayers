@@ -398,12 +398,12 @@ class LayerTreeWidget(QTreeWidget):
         event.accept()
         QTimer.singleShot(50, self.docker.refresh_tree)
 
-class LucideLayerDocker(DockWidget if IN_KRITA else QWidget):
+class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
     """精简优雅、包含全套原生功能与全类混合模式菜单的 Krita 图层面板"""
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Lucide 图层")
+        self.setWindowTitle("Folio Layers")
         self.canvas = None
 
         self.hover_preview = HoverPreviewPopup(None)
