@@ -3,4 +3,3 @@ __pycache__/
 *.pyo
 Krita-FolioLayers-*.zip
 native/build/
-folio_layers/libfolio_projthumb.so
