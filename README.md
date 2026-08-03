@@ -1,3 +1,5 @@
+<div align="center">
+
 # Krita Folio Layers
 
 <a href="https://qm.qq.com/q/mtg1yNCi1q">
@@ -8,6 +10,7 @@
   <a href="https://afdian.com/a/LanRhyme" target="_blank" rel="noopener noreferrer">
     <img src="https://img.shields.io/badge/afdian-@LanRhyme-946ce6?style=for-the-badge&logo=afdian&logoColor=white" alt="afdian"></a>
 
+</div>
 
 Folio 风格图层管理 Docker，原生 Lucide 图标、分类混合模式、拖拽排序，内置 C++ 原生投影缩略图引擎
 ![Screenshot](https://raw.githubusercontent.com/LanRhyme/Krita-FolioLayers/main/screenshot.png)
