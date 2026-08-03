@@ -465,6 +465,8 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self._hover_active = False  # True 表示浮窗已在展示过
 
         self._updating_ui = False
+        self._theme_refresh_scheduled = False
+        self._last_theme_signature = None
 
         # 主容器
         self.main_widget = QWidget(self)
@@ -565,8 +567,6 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
             self.hover_preview.hide()
             clear_theme_cache()
             self.apply_theme_qss()
-            self._rebuild_toolbar_icons()
-            self._rebuild_property_bar_theme()
             self.refresh_tree()
         except Exception:
             pass
@@ -666,14 +666,21 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
                 font-size: {ui_font}px;
             }}
             QFrame#ToolbarFrame {{
-                background: transparent;
-                border-bottom: 1px solid rgba({t.ACCENT_RGB}, 0.08);
+                background-color: {t.BG_BASE};
+                border-bottom: 1px solid rgba({t.ACCENT_RGB}, 0.16);
             }}
             QFrame#PropCard {{
-                background: {t.BG_DARK};
+                background-color: {t.BG_DARK};
                 border: 1px solid {t.BORDER};
                 border-radius: 4px;
                 padding: 1px 4px;
+            }}
+            QFrame#PropCard QToolButton {{
+                background-color: transparent;
+                color: {t.TEXT_MAIN};
+            }}
+            QFrame#ToolbarFrame QToolButton {{
+                color: {t.TEXT_MAIN};
             }}
             QLineEdit {{
                 background-color: {t.BG_DARK};
@@ -756,6 +763,46 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
                 border-radius: 3px;
             }}
         """)
+
+        # 工具栏图标在 QSS 应用前就已创建；主题切换/启动时序变化后必须重建，
+        # 否则浅色背景上会残留深色主题的白色图标
+        if hasattr(self, 'btn_new_paint'):
+            self._rebuild_toolbar_icons()
+        if hasattr(self, 'prop_card'):
+            self._rebuild_property_bar_theme()
+        self._last_theme_signature = self._theme_palette_signature()
+
+    def _theme_palette_signature(self):
+        """返回影响插件主题的 palette 摘要，用于 PaletteChange 去重"""
+        t = get_theme()
+        return (t.BG_DARK, t.BG_BASE, t.BG_ALT, t.TEXT_MAIN, t.TEXT_MUTED, t.ACCENT)
+
+    def _refresh_after_palette_change(self):
+        """QWidget palette 变化兜底：Krita Window 信号未到达时也刷新主题"""
+        self._theme_refresh_scheduled = False
+        self._refresh_theme_if_needed()
+
+    def _refresh_theme_if_needed(self):
+        """轮询检查主题摘要，覆盖 Krita/Qt 未向 dock 转发 palette 事件的情况"""
+        if self._theme_palette_signature() != self._last_theme_signature:
+            self._on_krita_theme_changed()
+
+    def changeEvent(self, event):
+        """监听 Qt palette 变化，覆盖 Krita 主题切换的所有时序"""
+        super().changeEvent(event)
+        try:
+            event_type = event.type()
+            event_types = []
+            qt_event_type = getattr(QEvent, 'Type', QEvent)
+            for name in ('PaletteChange', 'ApplicationPaletteChange'):
+                value = getattr(qt_event_type, name, None)
+                if value is not None:
+                    event_types.append(value)
+            if event_type in event_types and not self._theme_refresh_scheduled:
+                self._theme_refresh_scheduled = True
+                QTimer.singleShot(0, self._refresh_after_palette_change)
+        except Exception:
+            pass
 
     # ====== UI 结构构建 ======
     def _ui_font_size(self) -> int:
@@ -1297,6 +1344,9 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
             self.sync_timer.stop()
 
     def _sync_with_krita(self):
+        # Krita 主题切换偶尔不会向 pykrita dock 派发 PaletteChange，
+        # 用已有同步定时器做轻量签名检查，最多延迟一个同步周期
+        self._refresh_theme_if_needed()
         if not IN_KRITA or self._updating_ui or self._loading:
             return
         # 滚动进行中或刚结束：跳过轮询同步，避免周期性全量刷新打断滚动
