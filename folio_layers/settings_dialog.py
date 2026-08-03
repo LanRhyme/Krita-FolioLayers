@@ -159,6 +159,8 @@ class SettingsDialog(QDialog):
             ("标准 (14px)", 14),
             ("大 (16px)", 16),
             ("特大 (18px)", 18),
+            ("超大 (20px)", 20),
+            ("巨大 (24px)", 24),
         ]
         for label, val in icons:
             self.combo_icon.addItem(label, val)

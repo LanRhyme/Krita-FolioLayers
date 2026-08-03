@@ -533,14 +533,30 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
                     notifier.activeViewChanged.connect(self._on_view_changed)
                 if hasattr(notifier, 'imageModified'):
                     notifier.imageModified.connect(self._on_image_modified)
-                # 浅色/深色主题切换时自动重新应用主题（官方 themeChanged 信号）
-                if hasattr(notifier, 'themeChanged'):
-                    notifier.themeChanged.connect(self._on_krita_theme_changed)
+                # 主题切换信号：Krita 6 的 Notifier 没有 themeChanged（那是 Q_SLOTS 槽），
+                # 真实信号在 Window（KisMainWindow）上，窗口创建时发射
+                notifier.windowCreated.connect(self._connect_window_theme_signal)
             except Exception:
                 pass
 
         self.apply_theme_qss()
         self.refresh_tree()
+        if IN_KRITA:
+            self._connect_window_theme_signal()
+
+    def _connect_window_theme_signal(self, *args):
+        """连接当前 Krita 主窗口的 themeChanged 信号（Krita 主题切换时触发）"""
+        try:
+            w = Krita.instance().activeWindow()
+            if w and hasattr(w, 'themeChanged') and w.themeChanged is not None:
+                # 先断开旧连接再重连，避免窗口重建时信号重复堆积
+                try:
+                    w.themeChanged.disconnect(self._on_krita_theme_changed)
+                except TypeError:
+                    pass  # 尚未连接
+                w.themeChanged.connect(self._on_krita_theme_changed)
+        except Exception:
+            pass
 
     def _on_krita_theme_changed(self, *args):
         """Krita 深浅主题切换（含启动时首帧）：重新应用主题 QSS 并重建图层树"""
