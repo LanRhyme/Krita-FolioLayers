@@ -671,7 +671,8 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
             }}
             QFrame#PropCard {{
                 background-color: {t.BG_DARK};
-                border: 1px solid {t.BORDER};
+                /* 属性栏外框不使用 Mid 深色线，避免浅色主题出现黑色描边 */
+                border: none;
                 border-radius: 4px;
                 padding: 1px 4px;
             }}
