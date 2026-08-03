@@ -21,6 +21,12 @@ class ColorSwatchButton(QToolButton):
 
     def _update_style(self):
         t = get_theme()
+        try:
+            from .config import get_config
+            fsz = get_config().font_size
+            fsz = max(8, min(14, fsz if fsz > 0 else 9))
+        except Exception:
+            fsz = 9
         if self.hex_color == "transparent":
             # 无标记：显示一个带斜线的空方块
             self.setStyleSheet(f"""
@@ -28,7 +34,7 @@ class ColorSwatchButton(QToolButton):
                     background: transparent;
                     border: 1px solid {t.BORDER};
                     border-radius: 3px;
-                    font-size: 9px;
+                    font-size: {fsz}px;
                     color: {t.TEXT_MUTED};
                 }}
                 QToolButton:hover {{

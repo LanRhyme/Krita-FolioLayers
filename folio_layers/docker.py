@@ -533,11 +533,27 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
                     notifier.activeViewChanged.connect(self._on_view_changed)
                 if hasattr(notifier, 'imageModified'):
                     notifier.imageModified.connect(self._on_image_modified)
+                # 浅色/深色主题切换时自动重新应用主题（官方 themeChanged 信号）
+                if hasattr(notifier, 'themeChanged'):
+                    notifier.themeChanged.connect(self._on_krita_theme_changed)
             except Exception:
                 pass
 
         self.apply_theme_qss()
         self.refresh_tree()
+
+    def _on_krita_theme_changed(self, *args):
+        """Krita 深浅主题切换（含启动时首帧）：重新应用主题 QSS 并重建图层树"""
+        try:
+            self._hover_active = False
+            self.hover_preview.hide()
+            clear_theme_cache()
+            self.apply_theme_qss()
+            self._rebuild_toolbar_icons()
+            self._rebuild_property_bar_theme()
+            self.refresh_tree()
+        except Exception:
+            pass
 
     def update_tree_states(self, *args):
         """轻量级刷新：仅更新现有树节点的状态、缩略图和徽章，不重建整个树"""
@@ -607,6 +623,8 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
     def apply_theme_qss(self):
         """应用平坦化、极简统一的主题 QSS 样式表"""
         t = get_theme()
+        cfg = get_config()
+        ui_font = self._ui_font_size()
 
         # 主题变更时清除图标缓存（颜色变了需要重新渲染）
         clear_icon_cache()
@@ -614,22 +632,22 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         # 系统 QToolTip 颜色修复（双重保障：QPalette + QSS）
         pal = QApplication.instance().palette()
         pal.setColor(QPalette.ColorRole.ToolTipBase, QColor(t.BG_BASE))
-        pal.setColor(QPalette.ColorRole.ToolTipText, QColor("#f0f0f0"))
+        pal.setColor(QPalette.ColorRole.ToolTipText, QColor(t.TOOLTIP_TEXT))
         QApplication.instance().setPalette(pal)
 
         self.setStyleSheet(f"""
             QWidget {{
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                font-size: 11px;
+                font-size: {ui_font}px;
                 color: {t.TEXT_MAIN};
             }}
             QToolTip {{
                 background-color: {t.BG_BASE};
-                color: #f0f0f0;
+                color: {t.TOOLTIP_TEXT};
                 border: 1px solid {t.BORDER};
                 border-radius: 4px;
                 padding: 4px 8px;
-                font-size: 11px;
+                font-size: {ui_font}px;
             }}
             QFrame#ToolbarFrame {{
                 background: transparent;
@@ -647,7 +665,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
                 border: 1px solid {t.BORDER};
                 border-radius: 4px;
                 padding: 3px 8px;
-                font-size: 11px;
+                font-size: {ui_font}px;
             }}
             QLineEdit:focus {{
                 border: 1px solid {t.ACCENT};
@@ -677,6 +695,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
                 padding: 5px 24px 5px 12px;
                 border-radius: 3px;
                 margin: 1px 4px;
+                font-size: {ui_font}px;
             }}
             QMenu::item:selected {{
                 background-color: rgba({t.ACCENT_RGB}, 0.18);
@@ -723,38 +742,85 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         """)
 
     # ====== UI 结构构建 ======
+    def _ui_font_size(self) -> int:
+        """计算全局 UI 字号：配置优先，0 时跟随缩略图自动推导"""
+        cfg = get_config()
+        if cfg.font_size > 0:
+            return max(8, min(20, cfg.font_size))
+        return max(9, min(14, (cfg.thumb_size // 2) - 1))
+
+    def _toolbar_icon_size(self) -> int:
+        """顶部导航栏图标大小 (px)"""
+        cfg = get_config()
+        return max(10, min(24, cfg.toolbar_icon_size))
+
+    def _toolbar_btn_size(self) -> int:
+        """导航栏按钮外框大小 = 图标 + 内边距"""
+        return self._toolbar_icon_size() + 6
+
+    def _apply_responsive_toolbar(self):
+        """自适应布局：窗口过窄时按优先级收起次要按钮，宽时恢复"""
+        cfg = get_config()
+        if not cfg.adaptive_layout:
+            return
+        btns = getattr(self, '_toolbar_buttons', None)
+        if not btns:
+            return
+        w = self.width()
+        # 每个按钮标注了优先级：0=核心(永不收起)，数值越大越先收起
+        for btn, prio in btns:
+            if prio == 0:
+                btn.setVisible(True)
+            elif prio == 1:
+                btn.setVisible(w >= 220)
+            elif prio == 2:
+                btn.setVisible(w >= 300)
+            elif prio == 3:
+                btn.setVisible(w >= 400)
+            else:
+                btn.setVisible(w >= 500)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_responsive_toolbar()
+
     def _build_toolbar(self, parent_layout):
         self.toolbar_frame = QFrame()
-        self.toolbar_frame.setFixedHeight(24)
+        self.toolbar_frame.setObjectName("ToolbarFrame")
+        icon_sz = self._toolbar_icon_size()
+        btn_sz = self._toolbar_btn_size()
+        self.toolbar_frame.setFixedHeight(btn_sz + 4)
 
         tb_layout = QHBoxLayout(self.toolbar_frame)
         tb_layout.setContentsMargins(2, 1, 2, 1)
         tb_layout.setSpacing(2)
 
         t = get_theme()
+        self._toolbar_buttons = []
 
-        # 1. 新建颜料图层 (单独按钮)
-        self.btn_new_paint = QToolButton()
-        self.btn_new_paint.setFixedSize(20, 20)
-        self.btn_new_paint.setIcon(get_lucide_icon("plus", t.TEXT_MAIN, 14))
-        self.btn_new_paint.setToolTip("新建颜料图层 (Paint Layer)")
+        def add_tb_btn(icon_name, tooltip, muted=True, prio=0, size=None):
+            """创建导航栏按钮并登记到自适应收起列表"""
+            b = QToolButton()
+            b.setFixedSize(size or btn_sz, size or btn_sz)
+            icon_color = t.TEXT_MUTED if muted else t.TEXT_MAIN
+            b.setIcon(get_lucide_icon(icon_name, icon_color, icon_sz))
+            b.setToolTip(tooltip)
+            self._toolbar_buttons.append((b, prio))
+            return b
+
+        # 1. 新建颜料图层 (单独按钮) — 核心，永不收起
+        self.btn_new_paint = add_tb_btn("plus", "新建颜料图层 (Paint Layer)", muted=False, prio=0)
         self.btn_new_paint.clicked.connect(lambda: self._create_layer("paintlayer"))
         tb_layout.addWidget(self.btn_new_paint)
 
-        # 2. 新建图层组 (文件夹图标)
-        self.btn_new_group = QToolButton()
-        self.btn_new_group.setFixedSize(20, 20)
-        self.btn_new_group.setIcon(get_lucide_icon("folder", t.TEXT_MAIN, 14))
-        self.btn_new_group.setToolTip("新建图层组 (Group Layer)")
+        # 2. 新建图层组 (文件夹图标) — 核心
+        self.btn_new_group = add_tb_btn("folder", "新建图层组 (Group Layer)", muted=False, prio=0)
         self.btn_new_group.clicked.connect(lambda: self._create_layer("grouplayer"))
         tb_layout.addWidget(self.btn_new_group)
 
-        # 3. 更多图层类型 (纯下拉菜单)
-        self.btn_new_more = QToolButton()
-        self.btn_new_more.setFixedSize(20, 20)
-        self.btn_new_more.setIcon(get_lucide_icon("chevron-down", t.TEXT_MAIN, 14))
-        self.btn_new_more.setToolTip("更多图层类型...")
-        
+        # 3. 更多图层类型 (纯下拉菜单) — 核心
+        self.btn_new_more = add_tb_btn("chevron-down", "更多图层类型...", muted=False, prio=0)
+
         self.new_menu = QMenu(self)
         types = [
             ("vectorlayer", "矢量图层 (Vector Layer)", "type"),
@@ -773,7 +839,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
             if t_code == "SEP":
                 self.new_menu.addSeparator()
                 continue
-            act = QAction(get_lucide_icon(t_icon, t.TEXT_MAIN, 14), t_name, self.new_menu)
+            act = QAction(get_lucide_icon(t_icon, t.TEXT_MAIN, icon_sz), t_name, self.new_menu)
             if t_code.startswith("ACTION:"):
                 action_name = t_code.split(":", 1)[1]
                 act.triggered.connect(lambda checked, a=action_name: self._trigger_action(a))
@@ -787,78 +853,107 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
         tb_layout.addSpacing(2)
 
-        # 2. 复制图层
-        self.btn_dup = QToolButton()
-        self.btn_dup.setFixedSize(20, 20)
-        self.btn_dup.setIcon(get_lucide_icon("copy", t.TEXT_MUTED, 14))
-        self.btn_dup.setToolTip("复制当前图层")
+        # 2. 复制图层 (优先级 2：<300px 收起)
+        self.btn_dup = add_tb_btn("copy", "复制当前图层", muted=True, prio=2)
         self.btn_dup.clicked.connect(self._duplicate_layer)
         tb_layout.addWidget(self.btn_dup)
 
-        # 3. 删除图层
-        self.btn_del = QToolButton()
-        self.btn_del.setFixedSize(20, 20)
-        self.btn_del.setIcon(get_lucide_icon("trash-2", t.TEXT_MUTED, 14))
-        self.btn_del.setToolTip("删除当前图层")
+        # 3. 删除图层 (优先级 2)
+        self.btn_del = add_tb_btn("trash-2", "删除当前图层", muted=True, prio=2)
         self.btn_del.clicked.connect(self._delete_layer)
         tb_layout.addWidget(self.btn_del)
 
         tb_layout.addSpacing(2)
 
-        # 4. 上移 / 下移图层
-        self.btn_up = QToolButton()
-        self.btn_up.setFixedSize(20, 20)
-        self.btn_up.setIcon(get_lucide_icon("arrow-up", t.TEXT_MUTED, 14))
-        self.btn_up.setToolTip("向上移动图层")
+        # 4. 上移 / 下移图层 (优先级 2)
+        self.btn_up = add_tb_btn("arrow-up", "向上移动图层", muted=True, prio=2)
         self.btn_up.clicked.connect(lambda: self._move_layer("up"))
         tb_layout.addWidget(self.btn_up)
 
-        self.btn_down = QToolButton()
-        self.btn_down.setFixedSize(20, 20)
-        self.btn_down.setIcon(get_lucide_icon("arrow-down", t.TEXT_MUTED, 14))
-        self.btn_down.setToolTip("向下移动图层")
+        self.btn_down = add_tb_btn("arrow-down", "向下移动图层", muted=True, prio=2)
         self.btn_down.clicked.connect(lambda: self._move_layer("down"))
         tb_layout.addWidget(self.btn_down)
 
         tb_layout.addStretch()
 
-        # 颜色标记快捷按钮
-        self.btn_color_label = QToolButton()
-        self.btn_color_label.setFixedSize(20, 20)
-        self.btn_color_label.setIcon(get_lucide_icon("tag", t.TEXT_MUTED, 14))
-        self.btn_color_label.setToolTip("设置当前图层颜色标记")
+        # 颜色标记快捷按钮 (优先级 3)
+        self.btn_color_label = add_tb_btn("tag", "设置当前图层颜色标记", muted=True, prio=3)
         self.btn_color_label.clicked.connect(self._show_color_label_picker)
         tb_layout.addWidget(self.btn_color_label)
 
-        # 图层属性/操作菜单按钮 (对应右键菜单)
-        self.btn_layer_menu = QToolButton()
-        self.btn_layer_menu.setFixedSize(20, 20)
-        self.btn_layer_menu.setIcon(get_lucide_icon("more-horizontal", t.TEXT_MUTED, 14))
-        self.btn_layer_menu.setToolTip("当前图层操作菜单")
+        # 图层属性/操作菜单按钮 (对应右键菜单) (优先级 3)
+        self.btn_layer_menu = add_tb_btn("more-horizontal", "当前图层操作菜单", muted=True, prio=3)
         self.btn_layer_menu.clicked.connect(self._show_active_layer_menu)
         tb_layout.addWidget(self.btn_layer_menu)
 
-        # 5. 搜索按钮
-        self.btn_search = QToolButton()
-        self.btn_search.setFixedSize(20, 20)
-        self.btn_search.setIcon(get_lucide_icon("search", t.TEXT_MUTED, 14))
-        self.btn_search.setToolTip("搜索图层名称")
+        # 5. 搜索按钮 (优先级 1)
+        self.btn_search = add_tb_btn("search", "搜索图层名称", muted=True, prio=1)
         self.btn_search.clicked.connect(lambda: self.search_input.setVisible(not self.search_input.isVisible()))
         tb_layout.addWidget(self.btn_search)
 
-        # 6. 偏好设置按钮 ⚙️
-        self.btn_settings = QToolButton()
-        self.btn_settings.setFixedSize(20, 20)
-        self.btn_settings.setIcon(get_lucide_icon("settings", t.TEXT_MUTED, 14))
-        self.btn_settings.setToolTip("图层面板偏好设置")
+        # 6. 偏好设置按钮 ⚙️ (核心，永不收起)
+        self.btn_settings = add_tb_btn("settings", "图层面板偏好设置", muted=True, prio=0)
         self.btn_settings.clicked.connect(self._open_settings_dialog)
         tb_layout.addWidget(self.btn_settings)
 
         parent_layout.addWidget(self.toolbar_frame)
 
+    def _rebuild_toolbar_icons(self):
+        """配置变化后刷新导航栏：图标颜色/大小/按钮尺寸跟随新配置"""
+        t = get_theme()
+        icon_sz = self._toolbar_icon_size()
+        btn_sz = self._toolbar_btn_size()
+        self.toolbar_frame.setFixedHeight(btn_sz + 4)
+        mapping = {
+            self.btn_new_paint: ("plus", False),
+            self.btn_new_group: ("folder", False),
+            self.btn_new_more: ("chevron-down", False),
+            self.btn_dup: ("copy", True),
+            self.btn_del: ("trash-2", True),
+            self.btn_up: ("arrow-up", True),
+            self.btn_down: ("arrow-down", True),
+            self.btn_color_label: ("tag", True),
+            self.btn_layer_menu: ("more-horizontal", True),
+            self.btn_search: ("search", True),
+            self.btn_settings: ("settings", True),
+        }
+        for btn, (icon_name, muted) in mapping.items():
+            btn.setFixedSize(btn_sz, btn_sz)
+            icon_color = t.TEXT_MUTED if muted else t.TEXT_MAIN
+            btn.setIcon(get_lucide_icon(icon_name, icon_color, icon_sz))
+        # 重建下拉菜单图标
+        if hasattr(self, 'new_menu'):
+            self.new_menu.clear()
+            types = [
+                ("vectorlayer", "矢量图层 (Vector Layer)", "type"),
+                ("filterlayer", "滤镜图层 (Filter Layer)", "wand-2"),
+                ("adjustmentlayer", "调整图层 (Adjustment Layer)", "sliders"),
+                ("filllayer", "填充图层 (Fill Layer)", "palette"),
+                ("clonelayer", "克隆图层 (Clone Layer)", "copy"),
+                ("filelayer", "文件图层 (File Layer)", "layers"),
+                ("SEP", "", ""),
+                ("ACTION:add_new_transparency_mask", "透明度蒙版 (Transparency Mask)", "eye-off"),
+                ("ACTION:add_new_filter_mask", "滤镜蒙版 (Filter Mask)", "wand-2"),
+                ("ACTION:add_new_colorize_mask", "着色蒙版 (Colorize Mask)", "palette"),
+                ("ACTION:add_new_transform_mask", "变换蒙版 (Transform Mask)", "move"),
+            ]
+            for t_code, t_name, t_icon in types:
+                if t_code == "SEP":
+                    self.new_menu.addSeparator()
+                    continue
+                act = QAction(get_lucide_icon(t_icon, t.TEXT_MAIN, icon_sz), t_name, self.new_menu)
+                if t_code.startswith("ACTION:"):
+                    action_name = t_code.split(":", 1)[1]
+                    act.triggered.connect(lambda checked, a=action_name: self._trigger_action(a))
+                else:
+                    act.triggered.connect(lambda checked, c=t_code: self._create_layer(c))
+                self.new_menu.addAction(act)
+
     def _build_property_bar(self, parent_layout):
         self.prop_card = QFrame()
-        self.prop_card.setFixedHeight(24)
+        self.prop_card.setObjectName("PropCard")
+        bar_h = max(24, self._toolbar_icon_size() + 10)
+        self.prop_card.setFixedHeight(bar_h)
 
         p_layout = QHBoxLayout(self.prop_card)
         p_layout.setContentsMargins(2, 2, 2, 2)
@@ -869,9 +964,10 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.btn_blend.setObjectName("BlendModeBtn")
         from .qt_compat import QSizePolicy
         self.btn_blend.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.btn_blend.setFixedHeight(24)
+        self.btn_blend.setFixedHeight(bar_h - 4)
         self.btn_blend.setText("正常")
-        self.btn_blend.setStyleSheet("font-size: 10px;")
+        ui_font = self._ui_font_size()
+        self.btn_blend.setStyleSheet(f"font-size: {max(9, ui_font - 1)}px;")
 
         self.blend_menu = create_categorized_blending_menu(self.btn_blend, self._on_blend_selected)
         self.btn_blend.clicked.connect(lambda: self.blend_menu.exec(self.btn_blend.mapToGlobal(self.btn_blend.rect().bottomLeft())))
@@ -879,17 +975,35 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
         # 官方 KisSliderSpinBox 风格不透明度大滑块
         self.opacity_bar = OpacityBarWidget(self.prop_card)
-        self.opacity_bar.setFixedHeight(24)
+        self.opacity_bar.setFixedHeight(bar_h - 4)
         self.opacity_bar.valueChanged.connect(self._on_opacity_bar_changed)
         p_layout.addWidget(self.opacity_bar, 2)
 
         parent_layout.addWidget(self.prop_card)
+
+    def _rebuild_property_bar_theme(self):
+        """配置变化后刷新属性栏高度与字号"""
+        if not hasattr(self, 'prop_card'):
+            return
+        bar_h = max(24, self._toolbar_icon_size() + 10)
+        self.prop_card.setFixedHeight(bar_h)
+        self.btn_blend.setFixedHeight(bar_h - 4)
+        self.opacity_bar.setFixedHeight(bar_h - 4)
+        ui_font = self._ui_font_size()
+        self.btn_blend.setStyleSheet(f"font-size: {max(9, ui_font - 1)}px;")
+        self.opacity_bar.update()
 
     def _open_settings_dialog(self):
         dlg = SettingsDialog(self)
         if dlg.exec():
             self._hover_active = False
             self.hover_preview.hide()
+            clear_theme_cache()
+            # 重新应用主题 QSS + 重建图标/字号/尺寸（配置可能已变化）
+            self.apply_theme_qss()
+            self._rebuild_toolbar_icons()
+            self._rebuild_property_bar_theme()
+            self._apply_responsive_toolbar()
             self.refresh_tree()
 
 
@@ -1655,6 +1769,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
     def _build_and_show_context_menu(self, node, row_widget, global_pos):
         t = get_theme()
+        ui_font = self._ui_font_size()
 
         menu = QMenu(self)
         menu.setStyleSheet(f"""
@@ -1668,7 +1783,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
             QMenu::item {{
                 padding: 4px 14px 4px 6px;
                 border-radius: 2px;
-                font-size: 11px;
+                font-size: {ui_font}px;
             }}
             QMenu::item:selected {{
                 background-color: {t.SELECTION_BG};

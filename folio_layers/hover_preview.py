@@ -141,6 +141,15 @@ class HoverPreviewPopup(QFrame):
 
         self.refresh_theme_styles()
 
+    def _preview_font_size(self):
+        """悬停预览字号：跟随全局字体配置（0=自动用 10px）"""
+        try:
+            from .config import get_config
+            fsz = get_config().font_size
+            return fsz if fsz > 0 else 10
+        except Exception:
+            return 10
+
     def refresh_theme_styles(self):
         t = get_theme()
         self.card.setStyleSheet(f"""
@@ -165,9 +174,9 @@ class HoverPreviewPopup(QFrame):
                 border-radius: {t.RADIUS};
             }}
         """)
-        self.bounds_label.setStyleSheet(f"color: {t.TEXT_MUTED}; font-size: 10px;")
-        self.opacity_label.setStyleSheet(f"color: {t.TEXT_MUTED}; font-size: 10px;")
-        self.blend_label.setStyleSheet(f"color: {t.ACCENT}; font-size: 10px; font-weight: 500;")
+        self.bounds_label.setStyleSheet(f"color: {t.TEXT_MUTED}; font-size: {max(9, self._preview_font_size())}px;")
+        self.opacity_label.setStyleSheet(f"color: {t.TEXT_MUTED}; font-size: {max(9, self._preview_font_size())}px;")
+        self.blend_label.setStyleSheet(f"color: {t.ACCENT}; font-size: {max(9, self._preview_font_size())}px; font-weight: 500;")
 
     def update_node(self, node, force=False, docker_widget=None):
         if not node:
@@ -193,7 +202,7 @@ class HoverPreviewPopup(QFrame):
             border: 1px solid {t.BORDER};
             border-radius: 3px;
             padding: 1px 4px;
-            font-size: 9px;
+            font-size: {max(8, self._preview_font_size() - 1)}px;
             font-weight: bold;
         """)
         self.type_icon_label.setPixmap(get_lucide_pixmap(type_info[2], type_info[1], 16))

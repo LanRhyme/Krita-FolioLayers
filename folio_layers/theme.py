@@ -13,6 +13,12 @@ class DynamicKritaTheme:
         return app.palette() if app else QPalette()
 
     @property
+    def is_dark(self) -> bool:
+        """根据 Krita 当前主题明暗（Window 亮度）判断深浅色模式"""
+        c = self._get_palette().color(QPalette.ColorRole.Window)
+        return c.lightness() < 128
+
+    @property
     def BG_DARK(self):
         return self._get_palette().color(QPalette.ColorRole.Window).name()
 
@@ -54,6 +60,31 @@ class DynamicKritaTheme:
     @property
     def ACCENT_TEXT(self):
         return self._get_palette().color(QPalette.ColorRole.HighlightedText).name()
+
+    @property
+    def TOOLTIP_TEXT(self):
+        """ToolTip 文字色：跟随主文字（浅色主题下不再是硬编码白）"""
+        return self.TEXT_MAIN
+
+    @property
+    def INFO(self):
+        """信息/选区蓝：深色主题用亮蓝，浅色主题用深蓝保证对比度"""
+        return "#4299e1" if self.is_dark else "#1a6fb5"
+
+    @property
+    def INFO_RGB(self):
+        c = QColor(self.INFO)
+        return f"{c.red()}, {c.green()}, {c.blue()}"
+
+    @property
+    def DANGER(self):
+        """危险/删除红：深色主题用亮红，浅色主题用深红保证对比度"""
+        return "#e55046" if self.is_dark else "#c53030"
+
+    @property
+    def DANGER_RGB(self):
+        c = QColor(self.DANGER)
+        return f"{c.red()}, {c.green()}, {c.blue()}"
 
     @property
     def BORDER(self):

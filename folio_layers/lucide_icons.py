@@ -43,8 +43,18 @@ _LUCIDE_SVGS = {
 
 _PIXMAP_CACHE = {}
 
-def get_lucide_pixmap(name, color="#e0e0e0", size=24):
+def _default_icon_color():
+    """默认图标色跟随当前主题（浅色主题下用深色文字色，避免硬编码浅灰不可见）"""
+    try:
+        from .theme import get_theme
+        return get_theme().TEXT_MAIN
+    except Exception:
+        return "#e0e0e0"
+
+def get_lucide_pixmap(name, color=None, size=24):
     """Renders a Lucide SVG icon to a QPixmap with target color & dimensions"""
+    if color is None:
+        color = _default_icon_color()
     cache_key = (name, color, size)
     cached = _PIXMAP_CACHE.get(cache_key)
     if cached is not None:
@@ -70,6 +80,8 @@ def clear_icon_cache():
     """Clear the pixmap cache (call when theme changes)"""
     _PIXMAP_CACHE.clear()
 
-def get_lucide_icon(name, color="#e0e0e0", size=24):
+def get_lucide_icon(name, color=None, size=24):
     """Returns a QIcon for a given Lucide icon name and color"""
+    if color is None:
+        color = _default_icon_color()
     return QIcon(get_lucide_pixmap(name, color=color, size=size))

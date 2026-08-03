@@ -156,6 +156,12 @@ def get_blending_mode_name(mode_id: str) -> str:
 def create_categorized_blending_menu(parent_widget, callback):
     """Builds a multi-level nested QMenu for all Krita blending mode categories"""
     t = get_theme()
+    try:
+        from .config import get_config
+        ui_font = get_config().font_size
+        ui_font = max(9, min(16, ui_font if ui_font > 0 else 11))
+    except Exception:
+        ui_font = 11
     menu = QMenu(parent_widget)
     menu.setStyleSheet(f"""
         QMenu {{
@@ -168,7 +174,7 @@ def create_categorized_blending_menu(parent_widget, callback):
         QMenu::item {{
             padding: 4px 14px 4px 8px;
             border-radius: 2px;
-            font-size: 11px;
+            font-size: {ui_font}px;
         }}
         QMenu::item:selected {{
             background-color: {t.SELECTION_BG};

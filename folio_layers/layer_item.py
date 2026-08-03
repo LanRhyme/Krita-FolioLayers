@@ -63,6 +63,8 @@ class LayerRowWidget(QWidget):
         t = get_theme()
         self.has_ample_space = (cfg.thumb_size >= 20)
 
+        # 行高基准：考虑配置字号（字体大时行高同步增大）
+        font_extra = max(0, (cfg.font_size if cfg.font_size > 0 else 11) - 11)
         # 根据配置详情级别确定控件标准行高
         if cfg.detail_level == DETAIL_NONE:
             row_h = max(20, cfg.thumb_size + 2)
@@ -72,6 +74,7 @@ class LayerRowWidget(QWidget):
             row_h = max(32 if self.has_ample_space else 28, cfg.thumb_size + 6)
         else: # BALANCED
             row_h = max(32 if self.has_ample_space else 24, cfg.thumb_size + 4)
+        row_h += font_extra
 
         self.setFixedHeight(row_h)
         self.tree_item.setSizeHint(0, QSize(0, row_h))
@@ -216,7 +219,7 @@ class LayerRowWidget(QWidget):
                 color: {t.TEXT_MAIN};
                 border: none;
                 border-radius: 3px;
-                font-size: 11px;
+                font-size: {max(9, (cfg.font_size if cfg.font_size > 0 else 11) - 1)}px;
                 font-weight: 500;
                 padding: 0px 2px;
             }}
@@ -231,11 +234,11 @@ class LayerRowWidget(QWidget):
         self.btn_swipe_select.setToolTip("从当前图层不透明像素提取选区")
         self.btn_swipe_select.setStyleSheet(btn_base_qss + f"""
             QToolButton:hover {{
-                background-color: rgba(66, 153, 225, 0.2);
-                color: #4299e1;
+                background-color: rgba({t.INFO_RGB}, 0.2);
+                color: {t.INFO};
             }}
             QToolButton:pressed {{
-                background-color: rgba(66, 153, 225, 0.35);
+                background-color: rgba({t.INFO_RGB}, 0.35);
             }}
         """)
         self.btn_swipe_select.clicked.connect(self._on_swipe_select_clicked)
@@ -267,11 +270,11 @@ class LayerRowWidget(QWidget):
         self.btn_swipe_del.setToolTip("删除当前图层")
         self.btn_swipe_del.setStyleSheet(btn_base_qss + f"""
             QToolButton:hover {{
-                background-color: rgba(229, 80, 70, 0.2);
-                color: #e55046;
+                background-color: rgba({t.DANGER_RGB}, 0.2);
+                color: {t.DANGER};
             }}
             QToolButton:pressed {{
-                background-color: rgba(229, 80, 70, 0.35);
+                background-color: rgba({t.DANGER_RGB}, 0.35);
             }}
         """)
         self.btn_swipe_del.clicked.connect(self._on_swipe_del_clicked)
@@ -307,14 +310,17 @@ class LayerRowWidget(QWidget):
             }}
         """)
 
-        # 字体大小自适应调整 (默认稍小一些)
+        # 字体大小自适应调整：优先使用配置的 font_size，0 时跟随缩略图大小
         cfg = get_config()
-        self._font_sz = max(9, min(12, (cfg.thumb_size // 2) - 1))
-        if cfg.thumb_size < 24:
-            self._font_sz = 10
+        if cfg.font_size > 0:
+            self._font_sz = max(8, min(20, cfg.font_size))
+        else:
+            self._font_sz = max(9, min(12, (cfg.thumb_size // 2) - 1))
+            if cfg.thumb_size < 24:
+                self._font_sz = 10
         self.name_label.setStyleSheet(f"color: {t.TEXT_MAIN}; background: transparent; font-size: {self._font_sz}px;")
         
-        sub_font_style = f"color: {t.TEXT_MUTED}; font-size: {max(9, self._font_sz - 1)}px; background: transparent;"
+        sub_font_style = f"color: {t.TEXT_MUTED}; font-size: {max(8, self._font_sz - 1)}px; background: transparent;"
         self.blend_label.setStyleSheet(sub_font_style)
         self.opacity_label.setStyleSheet(sub_font_style)
         self.size_label.setStyleSheet(sub_font_style)
@@ -325,7 +331,7 @@ class LayerRowWidget(QWidget):
                 background: {t.BG_BASE};
                 color: {t.TEXT_MAIN};
                 border: 1px solid {t.BORDER};
-                font-size: 11px;
+                font-size: {self._font_sz}px;
                 padding: 0px;
             }}
         """)
@@ -837,7 +843,7 @@ class LayerRowWidget(QWidget):
             QMenu::item {{
                 padding: 6px 14px;
                 border-radius: 3px;
-                font-size: 11px;
+                font-size: {self._font_sz}px;
                 color: {t.TEXT_MAIN};
             }}
             QMenu::item:selected {{

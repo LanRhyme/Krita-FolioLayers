@@ -115,7 +115,10 @@ class OpacityBarWidget(QWidget):
 
         # 3. 绘制文本 ("不透明度: XX%")
         if not self._is_editing:
-            painter.setFont(QFont("Microsoft YaHei", 9))
+            from .config import get_config
+            cfg = get_config()
+            fsz = max(8, (cfg.font_size if cfg.font_size > 0 else 9))
+            painter.setFont(QFont("Microsoft YaHei", fsz))
             painter.setPen(QPen(QColor(t.TEXT_MAIN)))
             text = f"不透明度: {self._value}%"
             painter.drawText(bar_rect, Qt.AlignmentFlag.AlignCenter, text)

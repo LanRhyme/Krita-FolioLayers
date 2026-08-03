@@ -16,9 +16,11 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Folio Layers 图层面板设置")
-        self.setFixedSize(360, 440)
+        self.setFixedSize(380, 560)
 
         t = get_theme()
+        ui_font = get_config().font_size
+        ui_font = max(9, min(16, ui_font if ui_font > 0 else 11))
         self.setStyleSheet(f"""
             QDialog {{
                 background-color: {t.BG_BASE};
@@ -27,7 +29,7 @@ class SettingsDialog(QDialog):
             QGroupBox {{
                 color: {t.TEXT_MAIN};
                 font-weight: bold;
-                font-size: 11px;
+                font-size: {ui_font}px;
                 border: 1px solid {t.BORDER};
                 border-radius: 5px;
                 margin-top: 6px;
@@ -41,7 +43,7 @@ class SettingsDialog(QDialog):
             }}
             QLabel {{
                 color: {t.TEXT_MAIN};
-                font-size: 11px;
+                font-size: {ui_font}px;
             }}
             QComboBox, QSpinBox {{
                 background: {t.BG_DARK};
@@ -49,11 +51,11 @@ class SettingsDialog(QDialog):
                 border: 1px solid {t.BORDER};
                 border-radius: 3px;
                 padding: 3px 6px;
-                font-size: 11px;
+                font-size: {ui_font}px;
             }}
             QCheckBox {{
                 color: {t.TEXT_MAIN};
-                font-size: 11px;
+                font-size: {ui_font}px;
             }}
             QPushButton {{
                 background-color: {t.BG_ALT};
@@ -61,7 +63,7 @@ class SettingsDialog(QDialog):
                 border: 1px solid {t.BORDER};
                 border-radius: 3px;
                 padding: 4px 12px;
-                font-size: 11px;
+                font-size: {ui_font}px;
             }}
             QPushButton:hover {{
                 background-color: {t.HOVER_BG};
@@ -130,6 +132,41 @@ class SettingsDialog(QDialog):
         self.check_selection_masks.setChecked(cfg.show_selection_masks)
         l_visual.addWidget(self.check_selection_masks)
 
+        # 字体大小调整
+        row_font = QHBoxLayout()
+        row_font.addWidget(QLabel("全局字体大小:"))
+        self.combo_font = QComboBox()
+        fonts = [
+            ("自动 (跟随缩略图)", 0),
+            ("小 (9px)", 9),
+            ("标准 (11px)", 11),
+            ("大 (13px)", 13),
+            ("特大 (15px)", 15),
+        ]
+        for label, val in fonts:
+            self.combo_font.addItem(label, val)
+            if val == cfg.font_size:
+                self.combo_font.setCurrentIndex(self.combo_font.count() - 1)
+        row_font.addWidget(self.combo_font, 1)
+        l_visual.addLayout(row_font)
+
+        # 顶部导航栏图标大小
+        row_icon = QHBoxLayout()
+        row_icon.addWidget(QLabel("导航栏图标大小:"))
+        self.combo_icon = QComboBox()
+        icons = [
+            ("小 (12px)", 12),
+            ("标准 (14px)", 14),
+            ("大 (16px)", 16),
+            ("特大 (18px)", 18),
+        ]
+        for label, val in icons:
+            self.combo_icon.addItem(label, val)
+            if val == cfg.toolbar_icon_size:
+                self.combo_icon.setCurrentIndex(self.combo_icon.count() - 1)
+        row_icon.addWidget(self.combo_icon, 1)
+        l_visual.addLayout(row_icon)
+
         layout.addWidget(grp_visual)
 
         # 分组 2: 交互与手势
@@ -162,6 +199,17 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(grp_interaction)
 
+        # 分组 3: 自适应布局
+        grp_layout = QGroupBox("自适应布局", self)
+        l_layout = QVBoxLayout(grp_layout)
+        l_layout.setSpacing(8)
+
+        self.check_adaptive = QCheckBox("窗口过窄时自动收起次要导航栏按钮（腾出画布空间）")
+        self.check_adaptive.setChecked(cfg.adaptive_layout)
+        l_layout.addWidget(self.check_adaptive)
+
+        layout.addWidget(grp_layout)
+
         layout.addStretch()
 
         # 底部按钮
@@ -189,4 +237,7 @@ class SettingsDialog(QDialog):
         cfg.show_group_count = self.check_group_count.isChecked()
         cfg.enable_swipe_gesture = self.check_swipe.isChecked()
         cfg.show_selection_masks = self.check_selection_masks.isChecked()
+        cfg.font_size = self.combo_font.currentData()
+        cfg.toolbar_icon_size = self.combo_icon.currentData()
+        cfg.adaptive_layout = self.check_adaptive.isChecked()
         self.accept()
