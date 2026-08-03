@@ -127,10 +127,23 @@ class LayerTreeWidget(QTreeWidget):
                         self.docker._on_row_mouse_move(w, global_pos)
         return super().eventFilter(obj, event)
 
+    def _is_cursor_on_hover_item(self):
+        """确认延迟到期时鼠标仍停留在原图层行上"""
+        if not self._hover_item or not self.viewport().isVisible():
+            return False
+        vp_pos = self.viewport().mapFromGlobal(QCursor.pos())
+        if not self.viewport().rect().contains(vp_pos):
+            return False
+        return self.itemAt(vp_pos) == self._hover_item
+
     def _on_hover_timeout(self):
         from .config import get_config
         cfg = get_config()
         if not cfg.enable_hover_preview or not self._hover_item:
+            return
+        # 延迟期间鼠标可能已经离开图层行；不能再使用旧目标弹出预览
+        if not self._is_cursor_on_hover_item():
+            self._hover_item = None
             return
         w = self.itemWidget(self._hover_item, 0)
         if w and w.node:
@@ -503,6 +516,13 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.tree.itemExpanded.connect(self._on_item_expanded)
 
         main_layout.addWidget(self.tree, 1)
+
+        # 悬停预览守卫：补偿子控件/空白区不派发 leaveEvent 的情况，
+        # 定期确认鼠标是否仍在图层列表或已显示的预览卡片内
+        self._hover_guard_timer = QTimer(self)
+        self._hover_guard_timer.setInterval(80)
+        self._hover_guard_timer.timeout.connect(self._guard_hover_cursor)
+        self._hover_guard_timer.start()
 
         # 加载批处理状态：当 Krita 加载/创建大图像时暂停所有同步，避免阻塞主线程
         self._loading = True
@@ -1072,6 +1092,32 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
 
     # ====== 悬停预览接口 ======
+    def _is_cursor_in_widget(self, widget, global_pos):
+        """判断全局鼠标位置是否在指定 QWidget 内"""
+        if not widget or not widget.isVisible():
+            return False
+        return widget.rect().contains(widget.mapFromGlobal(global_pos))
+
+    def _guard_hover_cursor(self):
+        """取消鼠标已离开图层列表后的延迟弹出，避免悬停预览竞态"""
+        tree = getattr(self, 'tree', None)
+        if not tree:
+            return
+        pending = tree._hover_timer.isActive()
+        visible = self.hover_preview.isVisible() or getattr(self, '_hover_active', False)
+        if not pending and not visible:
+            return
+
+        global_pos = QCursor.pos()
+        in_tree = self._is_cursor_in_widget(tree.viewport(), global_pos)
+        in_preview = self._is_cursor_in_widget(self.hover_preview, global_pos)
+        if in_tree or in_preview:
+            return
+
+        tree._hover_timer.stop()
+        tree._hover_item = None
+        self.reset_hover_state()
+
     def _on_row_mouse_move(self, row_widget, global_pos):
         # 滚动进行中或刚结束（250ms 内）：抑制 hover 预览触发，保证滚动流畅
         if time.monotonic() - getattr(self, '_last_scroll_ts', 0.0) < 0.25:
