@@ -7,7 +7,7 @@ import time
 from collections import OrderedDict
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
-    QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
+    QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer, QFileDialog,
     Qt, QSize, QRect, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
     QEvent, QPainter, QPen, QPoint, QPointF, QMouseEvent, QPropertyAnimation, QEasingCurve, QLayout, QDrag
 )
@@ -2458,6 +2458,46 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         except:
             pass
 
+    def _export_layer_png(self, node):
+        """将当前图层导出为 PNG（保留透明度）"""
+        if not IN_KRITA or not node:
+            return
+        doc = Krita.instance().activeDocument()
+        if not doc:
+            return
+        default_name = node.name() + ".png"
+        path, _ = QFileDialog.getSaveFileName(self, "导出图层为 PNG", default_name, "PNG 图像 (*.png)")
+        if not path:
+            return
+        if not path.lower().endswith(".png"):
+            path += ".png"
+        try:
+            img = node.projectionImage()
+            if img is None or img.isNull():
+                return
+            ok = img.save(path, "PNG")
+            if ok:
+                QTimer.singleShot(0, lambda: self._show_export_toast(path))
+        except Exception:
+            pass
+
+    def _show_export_toast(self, path):
+        """导出成功后于面板顶部短暂提示（无独立弹窗，不打断工作流）"""
+        try:
+            t = get_theme()
+            self._export_toast = QLabel(f"已导出: {path.split('/')[-1]}", self)
+            self._export_toast.setStyleSheet(
+                f"background-color: {t.BG_BASE}; color: {t.ACCENT_TEXT};"
+                f"border: 1px solid {t.BORDER}; border-radius: 4px; padding: 4px 10px;"
+                f"font-size: 12px;")
+            self._export_toast.adjustSize()
+            self._export_toast.move(self.width() - self._export_toast.width() - 10, 40)
+            self._export_toast.show()
+            self._export_toast.raise_()
+            QTimer.singleShot(2200, self._export_toast.deleteLater)
+        except Exception:
+            pass
+
     def _group_selection(self):
         """将当前选中的图层归组包裹"""
         if not IN_KRITA:
@@ -2617,6 +2657,25 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         act_props = QAction(get_lucide_icon("sliders", t.TEXT_MAIN, 14), "图层属性 (Properties...)", menu)
         act_props.triggered.connect(lambda: self._trigger_action("layer_properties"))
         menu.addAction(act_props)
+
+        menu.addSeparator()
+
+        # 导出 / 盖印 / 参考图像
+        act_export = QAction(get_lucide_icon("download", t.TEXT_MAIN, 14), "导出图层为 PNG...", menu)
+        act_export.triggered.connect(lambda: self._export_layer_png(node))
+        menu.addAction(act_export)
+
+        act_stamp = QAction(get_lucide_icon("layers", t.TEXT_MAIN, 14), "盖印可见图层 (New From Visible)", menu)
+        act_stamp.triggered.connect(lambda: self._trigger_action("new_from_visible"))
+        menu.addAction(act_stamp)
+
+        act_ref_layer = QAction(get_lucide_icon("image", t.TEXT_MAIN, 14), "创建参考图像（从当前图层）", menu)
+        act_ref_layer.triggered.connect(lambda: self._trigger_action("create_reference_image_from_active_layer"))
+        menu.addAction(act_ref_layer)
+
+        act_ref_visible = QAction(get_lucide_icon("frame", t.TEXT_MAIN, 14), "创建参考图像（从可见画布）", menu)
+        act_ref_visible.triggered.connect(lambda: self._trigger_action("create_reference_image_from_visible_canvas"))
+        menu.addAction(act_ref_visible)
 
         menu.addSeparator()
 
