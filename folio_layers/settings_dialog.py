@@ -206,7 +206,7 @@ class SettingsDialog(QDialog):
         l_layout = QVBoxLayout(grp_layout)
         l_layout.setSpacing(8)
 
-        self.check_adaptive = QCheckBox("窗口过窄时自动收起次要导航栏按钮（腾出画布空间）")
+        self.check_adaptive = QCheckBox("窗口过窄时自动换行显示导航栏按钮（双行布局，不隐藏按钮）")
         self.check_adaptive.setChecked(cfg.adaptive_layout)
         l_layout.addWidget(self.check_adaptive)
 

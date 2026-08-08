@@ -8,7 +8,7 @@ from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
     Qt, QSize, QRect, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
-    QEvent, QPainter, QPen, QPoint, QPropertyAnimation, QEasingCurve
+    QEvent, QPainter, QPen, QPoint, QPointF, QMouseEvent, QPropertyAnimation, QEasingCurve, QLayout
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
@@ -29,6 +29,97 @@ except ImportError:
     IN_KRITA = False
     DockWidget = QWidget
 
+
+class FlowLayout(QLayout):
+    """自动换行布局：宽度不足时子项自动折行成多行显示（自适应双行工具栏）"""
+
+    def __init__(self, parent=None, margin=0, h_spacing=2, v_spacing=2):
+        super().__init__(parent)
+        if parent is not None:
+            self.setContentsMargins(margin, margin, margin, margin)
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+        self._items = []
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index):
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):
+        # 不向任意方向扩展
+        try:
+            return Qt.Orientation(0)
+        except Exception:
+            return 0
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._flow(QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._flow(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        m = self.contentsMargins()
+        w = m.left() + m.right()
+        h = m.top() + m.bottom()
+        for item in self._items:
+            wid = item.widget()
+            if wid and not wid.isVisible():
+                continue
+            sz = item.sizeHint()
+            if not sz.isValid():
+                sz = item.minimumSize()
+            w = max(w, m.left() + m.right() + sz.width())
+            h = max(h, m.top() + m.bottom() + sz.height())
+        return QSize(w, h)
+
+    def _flow(self, rect, test_only):
+        m = self.contentsMargins()
+        effective = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom())
+        x = effective.x()
+        y = effective.y()
+        line_h = 0
+        max_x = effective.right()
+        for item in self._items:
+            wid = item.widget()
+            if wid and not wid.isVisible():
+                continue
+            sz = item.sizeHint()
+            if not sz.isValid():
+                sz = item.minimumSize()
+            next_x = x + sz.width() + self._h_spacing
+            # 放不下且当前行已有内容 → 换行
+            if next_x - self._h_spacing > max_x + 1 and line_h > 0:
+                x = effective.x()
+                y = y + line_h + self._v_spacing
+                next_x = x + sz.width() + self._h_spacing
+                line_h = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), sz))
+            x = next_x
+            line_h = max(line_h, sz.height())
+        return y + line_h + m.bottom() - rect.y()
+
+
 class LayerTreeWidget(QTreeWidget):
     """支持将拖拽事件转发给 Krita 原生 API 的图层树，及集中式 3 秒悬停预览处理"""
     def __init__(self, docker):
@@ -41,6 +132,9 @@ class LayerTreeWidget(QTreeWidget):
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
         self.viewport().installEventFilter(self)
+
+        # 数位笔拖拽支持：笔按下时锁定的目标控件（模拟 Qt 鼠标抓取语义）
+        self._pen_grab = None
 
         app = QApplication.instance()
         if app:
@@ -113,9 +207,79 @@ class LayerTreeWidget(QTreeWidget):
             # 触摸板：原生像素滚动（已平滑）
             super().wheelEvent(event)
 
+    _TABLET_TYPES = None
+
+    def _tablet_event_types(self):
+        """兼容 PyQt5 (QEvent.TabletPress) 与 PyQt6 (QEvent.Type.TabletPress)"""
+        if LayerTreeWidget._TABLET_TYPES is None:
+            LayerTreeWidget._TABLET_TYPES = tuple(
+                getattr(QEvent, name, getattr(getattr(QEvent, 'Type', None), name, None))
+                for name in ('TabletPress', 'TabletMove', 'TabletRelease')
+            )
+        return LayerTreeWidget._TABLET_TYPES
+
+    @staticmethod
+    def _is_pen_device(event):
+        """判断事件是否来自触控笔/橡皮等真实笔设备（排除鼠标型设备）"""
+        try:
+            dev = event.deviceType()
+        except AttributeError:
+            return True  # 无法判断设备时按笔处理
+        try:
+            name = str(dev).rsplit('.', 1)[-1].lower()
+        except Exception:
+            return True
+        # Qt6 的 QInputDevice.DeviceType.Mouse 是唯一需要排除的设备类型
+        return 'mouse' not in name
+
+    @staticmethod
+    def _make_mouse_event(ev_type, local, global_pos, button, buttons, modifiers):
+        """构造鼠标事件，兼容 PyQt6 / PyQt5 构造函数差异"""
+        if hasattr(QEvent, 'Type'):  # PyQt6: (type, localPos, globalPos, button, buttons, modifiers)
+            return QMouseEvent(ev_type, QPointF(local), QPointF(global_pos), button, buttons, modifiers)
+        # PyQt5: (type, localPos, button, buttons, modifiers)
+        return QMouseEvent(ev_type, QPointF(local), button, buttons, modifiers)
+
+    def _handle_tablet_as_mouse(self, event):
+        """把落在图层树上的触控笔事件转译为等价的鼠标事件注入 viewport，
+        让 QAbstractItemView 的原生拖拽排序能用数位笔触发
+        （Qt 仅在 tablet 事件未被 accept 时合成鼠标事件，某些平台/合成器下不可靠）"""
+        viewport = self.viewport()
+        press_t, move_t, rel_t = self._tablet_event_types()
+        ev_type = event.type()
+
+        global_pos = event.globalPosition() if hasattr(event, 'globalPosition') else event.globalPos()
+
+        if ev_type == press_t:
+            # 笔按下：锁定触点下方最深控件，模拟 Qt 的 qt_button_down 抓取语义
+            w = QApplication.widgetAt(global_pos.toPoint())
+            if w is None or not (w == self or self.isAncestorOf(w)):
+                w = viewport
+            self._pen_grab = w
+
+        receiver = self._pen_grab if self._pen_grab is not None else viewport
+
+        mouse_type = {
+            press_t: getattr(QEvent, 'MouseButtonPress', getattr(getattr(QEvent, 'Type', None), 'MouseButtonPress', None)),
+            move_t: getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None)),
+            rel_t: getattr(QEvent, 'MouseButtonRelease', getattr(getattr(QEvent, 'Type', None), 'MouseButtonRelease', None)),
+        }[ev_type]
+
+        local = receiver.mapFromGlobal(global_pos.toPoint())
+        me = self._make_mouse_event(mouse_type, local, global_pos, event.button(), event.buttons(), event.modifiers())
+        QApplication.sendEvent(receiver, me)
+
+        if ev_type == rel_t:
+            self._pen_grab = None
+
     def eventFilter(self, obj, event):
         if obj == self.viewport():
             ev_type = event.type()
+            # 数位笔事件：转译为鼠标事件后吞掉原始事件（阻止 Qt 重复合成，避免双重触发）
+            if ev_type in self._tablet_event_types() and self._is_pen_device(event):
+                self._handle_tablet_as_mouse(event)
+                event.accept()
+                return True
             ev_mouse_move = getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None))
             if ev_type == ev_mouse_move:
                 global_pos = QCursor.pos()
@@ -843,26 +1007,35 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         return self._toolbar_icon_size() + 6
 
     def _apply_responsive_toolbar(self):
-        """自适应布局：窗口过窄时按优先级收起次要按钮，宽时恢复"""
+        """自适应布局：所有按钮始终可见，宽度不足时自动折行成双行/多行显示，
+        不再按优先级收起按钮（面板变窄时高度随之增高，腾出空间由换行解决）"""
+        frame = getattr(self, 'toolbar_frame', None)
+        if frame is None:
+            return
+        lay = frame.layout()
+        if lay is None:
+            return
+        # 全部按钮保持可见（换行由 FlowLayout 处理）
+        for btn, _prio in getattr(self, '_toolbar_buttons', []):
+            btn.setVisible(True)
         cfg = get_config()
         if not cfg.adaptive_layout:
-            return
-        btns = getattr(self, '_toolbar_buttons', None)
-        if not btns:
-            return
-        w = self.width()
-        # 每个按钮标注了优先级：0=核心(永不收起)，数值越大越先收起
-        for btn, prio in btns:
-            if prio == 0:
-                btn.setVisible(True)
-            elif prio == 1:
-                btn.setVisible(w >= 220)
-            elif prio == 2:
-                btn.setVisible(w >= 300)
-            elif prio == 3:
-                btn.setVisible(w >= 400)
-            else:
-                btn.setVisible(w >= 500)
+            # 关闭自适应：固定单行高度（FlowLayout 在极端窄宽下仍会折行）
+            frame.setMinimumHeight(0)
+            frame.setMaximumHeight(16777215)
+            frame.setFixedHeight(self._toolbar_btn_size() + 4)
+        else:
+            # 自适应：高度交给 FlowLayout 的 heightForWidth 计算
+            frame.setMinimumHeight(0)
+            frame.setMaximumHeight(16777215)
+            lay.invalidate()
+            frame.updateGeometry()
+        # 通知外层布局重新计算（工具栏高度变化会推动下方控件）
+        outer = frame.parentWidget()
+        while outer is not None:
+            if outer.layout() is not None:
+                outer.layout().invalidate()
+            outer = outer.parentWidget()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -873,17 +1046,16 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.toolbar_frame.setObjectName("ToolbarFrame")
         icon_sz = self._toolbar_icon_size()
         btn_sz = self._toolbar_btn_size()
-        self.toolbar_frame.setFixedHeight(btn_sz + 4)
 
-        tb_layout = QHBoxLayout(self.toolbar_frame)
+        # 自适应双行工具栏：宽度不足时按钮自动折行，不再隐藏
+        tb_layout = FlowLayout(self.toolbar_frame, margin=0, h_spacing=2, v_spacing=2)
         tb_layout.setContentsMargins(2, 1, 2, 1)
-        tb_layout.setSpacing(2)
 
         t = get_theme()
         self._toolbar_buttons = []
 
         def add_tb_btn(icon_name, tooltip, muted=True, prio=0, size=None):
-            """创建导航栏按钮并登记到自适应收起列表"""
+            """创建导航栏按钮并登记到工具栏按钮列表"""
             b = QToolButton()
             b.setFixedSize(size or btn_sz, size or btn_sz)
             icon_color = t.TEXT_MUTED if muted else t.TEXT_MAIN
@@ -935,21 +1107,17 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.btn_new_more.clicked.connect(lambda: self.new_menu.exec(self.btn_new_more.mapToGlobal(self.btn_new_more.rect().bottomLeft())))
         tb_layout.addWidget(self.btn_new_more)
 
-        tb_layout.addSpacing(2)
-
-        # 2. 复制图层 (优先级 2：<300px 收起)
+        # 复制图层
         self.btn_dup = add_tb_btn("copy", "复制当前图层", muted=True, prio=2)
         self.btn_dup.clicked.connect(self._duplicate_layer)
         tb_layout.addWidget(self.btn_dup)
 
-        # 3. 删除图层 (优先级 2)
+        # 删除图层
         self.btn_del = add_tb_btn("trash-2", "删除当前图层", muted=True, prio=2)
         self.btn_del.clicked.connect(self._delete_layer)
         tb_layout.addWidget(self.btn_del)
 
-        tb_layout.addSpacing(2)
-
-        # 4. 上移 / 下移图层 (优先级 2)
+        # 上移 / 下移图层
         self.btn_up = add_tb_btn("arrow-up", "向上移动图层", muted=True, prio=2)
         self.btn_up.clicked.connect(lambda: self._move_layer("up"))
         tb_layout.addWidget(self.btn_up)
@@ -958,24 +1126,22 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.btn_down.clicked.connect(lambda: self._move_layer("down"))
         tb_layout.addWidget(self.btn_down)
 
-        tb_layout.addStretch()
-
-        # 颜色标记快捷按钮 (优先级 3)
-        self.btn_color_label = add_tb_btn("tag", "设置当前图层颜色标记", muted=True, prio=3)
+        # 颜色标记快捷按钮
+        self.btn_color_label = add_tb_btn("tag", "设置当前图层颜色标记", muted=True, prio=1)
         self.btn_color_label.clicked.connect(self._show_color_label_picker)
         tb_layout.addWidget(self.btn_color_label)
 
-        # 图层属性/操作菜单按钮 (对应右键菜单) (优先级 3)
-        self.btn_layer_menu = add_tb_btn("more-horizontal", "当前图层操作菜单", muted=True, prio=3)
+        # 图层属性/操作菜单按钮 (对应右键菜单)
+        self.btn_layer_menu = add_tb_btn("more-horizontal", "当前图层操作菜单", muted=True, prio=1)
         self.btn_layer_menu.clicked.connect(self._show_active_layer_menu)
         tb_layout.addWidget(self.btn_layer_menu)
 
-        # 5. 搜索按钮 (优先级 1)
-        self.btn_search = add_tb_btn("search", "搜索图层名称", muted=True, prio=1)
+        # 搜索按钮
+        self.btn_search = add_tb_btn("search", "搜索图层名称", muted=True, prio=3)
         self.btn_search.clicked.connect(lambda: self.search_input.setVisible(not self.search_input.isVisible()))
         tb_layout.addWidget(self.btn_search)
 
-        # 6. 偏好设置按钮 ⚙️ (核心，永不收起)
+        # 偏好设置按钮 ⚙️
         self.btn_settings = add_tb_btn("settings", "图层面板偏好设置", muted=True, prio=0)
         self.btn_settings.clicked.connect(self._open_settings_dialog)
         tb_layout.addWidget(self.btn_settings)
@@ -987,7 +1153,6 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         t = get_theme()
         icon_sz = self._toolbar_icon_size()
         btn_sz = self._toolbar_btn_size()
-        self.toolbar_frame.setFixedHeight(btn_sz + 4)
         mapping = {
             self.btn_new_paint: ("plus", False),
             self.btn_new_group: ("folder", False),
@@ -1005,6 +1170,11 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
             btn.setFixedSize(btn_sz, btn_sz)
             icon_color = t.TEXT_MUTED if muted else t.TEXT_MAIN
             btn.setIcon(get_lucide_icon(icon_name, icon_color, icon_sz))
+        # 按钮尺寸变化后刷新换行布局与高度
+        lay = getattr(self.toolbar_frame, 'layout', None)
+        if lay is not None and lay() is not None:
+            lay().invalidate()
+            self.toolbar_frame.updateGeometry()
         # 重建下拉菜单图标
         if hasattr(self, 'new_menu'):
             self.new_menu.clear()
@@ -1691,9 +1861,12 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         final_name = f"{base_name}{max_idx + 1}"
 
         # 特殊图层类型需要属性配置或生成器，必须触发 Krita 原生 Action 弹窗
+        # 注意: Krita 并无独立的“滤镜图层”类型，其滤镜图层即调整图层
+        # (KisAdjustmentLayer)，对应 action 为 add_new_adjustment_layer；
+        # add_new_filter_layer 在 Krita 中不存在，触发会静默失败
         action_map = {
             "filllayer": "add_new_fill_layer",
-            "filterlayer": "add_new_filter_layer",
+            "filterlayer": "add_new_adjustment_layer",
             "filelayer": "add_new_file_layer",
             "clonelayer": "add_new_clone_layer",
             "adjustmentlayer": "add_new_adjustment_layer",

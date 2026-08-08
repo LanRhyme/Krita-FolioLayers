@@ -3,18 +3,18 @@
 
 try:
     from PyQt6.QtCore import (
-        Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QRect, QEvent, QTimer, QByteArray,
+        Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QPointF, QRect, QEvent, QTimer, QByteArray,
         QMimeData, QSettings, QPropertyAnimation, QEasingCurve
     )
     from PyQt6.QtGui import (
         QPainter, QColor, QFont, QPen, QBrush, QIcon, QPixmap, QImage, QCursor, QDrag,
-        QAction, QPalette
+        QAction, QPalette, QMouseEvent
     )
     from PyQt6.QtWidgets import (
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QToolButton,
         QScrollArea, QSizePolicy, QApplication, QFrame, QInputDialog, QMenu,
         QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
-        QHeaderView, QLineEdit, QAbstractItemView, QDialog, QCheckBox, QGroupBox
+        QHeaderView, QLineEdit, QAbstractItemView, QDialog, QCheckBox, QGroupBox, QLayout
     )
     from PyQt6.QtSvg import QSvgRenderer
 
@@ -48,17 +48,17 @@ try:
 
 except ImportError:
     from PyQt5.QtCore import (
-        Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QRect, QEvent, QTimer, QByteArray,
+        Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QPointF, QRect, QEvent, QTimer, QByteArray,
         QMimeData, QSettings, QPropertyAnimation, QEasingCurve
     )
     from PyQt5.QtGui import (
         QPainter, QColor, QFont, QPen, QBrush, QIcon, QPixmap, QImage, QCursor, QDrag,
-        QPalette
+        QPalette, QMouseEvent
     )
     from PyQt5.QtWidgets import (
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QToolButton,
         QScrollArea, QSizePolicy, QApplication, QFrame, QInputDialog, QMenu,
         QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
-        QHeaderView, QLineEdit, QAction, QAbstractItemView, QDialog, QCheckBox, QGroupBox
+        QHeaderView, QLineEdit, QAction, QAbstractItemView, QDialog, QCheckBox, QGroupBox, QLayout
     )
     from PyQt5.QtSvg import QSvgRenderer
