@@ -110,6 +110,13 @@ class LayerRowWidget(QWidget):
         self.expand_btn.clicked.connect(self._toggle_expand)
         layout.addWidget(self.expand_btn)
 
+        # 2.5 显示/隐藏图层按钮（放在缩略图左边，更符合直觉）
+        self.vis_btn = QToolButton()
+        self.vis_btn.setFixedSize(18, 18)
+        self.vis_btn.setToolTip("显示/隐藏图层 (Toggle Visibility)")
+        self.vis_btn.clicked.connect(self._toggle_visibility)
+        layout.addWidget(self.vis_btn)
+
         # 3. 动态大小缩略图
         self.thumb_label = QLabel()
         self.thumb_label.setFixedSize(cfg.thumb_size, cfg.thumb_size)
@@ -174,12 +181,6 @@ class LayerRowWidget(QWidget):
         self.lock_btn.setToolTip("锁定图层 (Lock Layer)")
         self.lock_btn.clicked.connect(self._toggle_lock)
         layout.addWidget(self.lock_btn)
-
-        self.vis_btn = QToolButton()
-        self.vis_btn.setFixedSize(18, 18)
-        self.vis_btn.setToolTip("显示/隐藏图层 (Toggle Visibility)")
-        self.vis_btn.clicked.connect(self._toggle_visibility)
-        layout.addWidget(self.vis_btn)
 
         self.pt_btn = QToolButton()
         self.pt_btn.setFixedSize(18, 18)
