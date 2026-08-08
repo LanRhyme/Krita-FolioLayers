@@ -657,8 +657,8 @@ class LayerTreeWidget(QTreeWidget):
             self._scroll_step = 0
             self._auto_scroll_timer.stop()
 
-        # 计算插入位置：Above / Below / On（近似 QAbstractItemView::dropIndicatorPosition）
-        target_item = self.itemAt(pos)
+        # 计算插入位置：Above / Below / On（空白处回退到最近行）
+        target_item = self._resolve_drop_target(pos)
         above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
         below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
         on_item = getattr(QAbstractItemView.DropIndicatorPosition, 'OnItem', None)
@@ -724,8 +724,37 @@ class LayerTreeWidget(QTreeWidget):
         except Exception:
             pass
 
+    def _nearest_item(self, pos):
+        """空白落点兜底：找视觉上距离 pos 最近的行（拖到列表末尾/行间隙也能定位）"""
+        best = None
+        best_d = None
+
+        def walk(item):
+            nonlocal best, best_d
+            r = self.visualItemRect(item)
+            if r.isValid():
+                d = abs(pos.y() - r.center().y())
+                if best_d is None or d < best_d:
+                    best_d = d
+                    best = item
+            for i in range(item.childCount()):
+                walk(item.child(i))
+
+        for i in range(self.topLevelItemCount()):
+            walk(self.topLevelItem(i))
+        return best
+
+    def _resolve_drop_target(self, pos):
+        """解析落点目标行（空白处回退到最近的行）"""
+        item = self.itemAt(pos)
+        if item is not None:
+            return item
+        return self._nearest_item(pos)
+
     def _compute_drop_indicator(self, pos, target_item):
-        """根据鼠标位置与目标行计算插入位置（近似 QAbstractItemView::dropIndicatorPosition）"""
+        """根据鼠标位置与目标行计算插入位置
+        “中”(OnItem/嵌入)只在目标行正中央窄带判定，且仅图层组支持嵌入；
+        其余全部是上/下——拖拽稍偏不会被当作嵌入组导致落点错乱"""
         above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
         below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
         on_item = getattr(QAbstractItemView.DropIndicatorPosition, 'OnItem', None)
@@ -735,8 +764,8 @@ class LayerTreeWidget(QTreeWidget):
         if not rect.isValid():
             return None
         y = pos.y()
-        mid_top = rect.top() + rect.height() * 0.33
-        mid_bot = rect.top() + rect.height() * 0.66
+        mid_top = rect.top() + rect.height() * 0.45
+        mid_bot = rect.top() + rect.height() * 0.55
         if y < mid_top:
             return above
         if y > mid_bot:
@@ -749,8 +778,11 @@ class LayerTreeWidget(QTreeWidget):
         """自定义笔拖拽落点：以释放位置重算目标与插入位置，再执行重排序
         （不再依赖最后 move 的缓存指示线位置，松手瞬间移动也不会落点错位）"""
         dragged_item = getattr(self, '_pen_drag_item', None)
-        target_item = self.itemAt(pos)
-        if dragged_item is None or target_item is None:
+        if dragged_item is None:
+            self._pen_log("[pen] drop aborted: no drag source")
+            return
+        target_item = self._resolve_drop_target(pos)
+        if target_item is None:
             self._pen_log("[pen] drop aborted: no target/selection")
             return
         if target_item == dragged_item:
