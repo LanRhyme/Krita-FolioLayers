@@ -148,6 +148,14 @@ class LayerTreeWidget(QTreeWidget):
         self._pen_dragging = False
         self._pen_drag_item = None
         self._pen_drag_pos = None
+        # 笔拖拽幽灵（模拟 Qt 原生 QDrag 的拖拽虚影，鼠标拖拽有、笔拖拽也必须有）
+        self._ghost = QLabel(None)
+        self._ghost.setWindowFlags(getattr(Qt, 'ToolTip', getattr(getattr(Qt, 'WindowType', None), 'ToolTip', 0))
+                                   | getattr(Qt, 'FramelessWindowHint', getattr(getattr(Qt, 'WindowType', None), 'FramelessWindowHint', 0)))
+        self._ghost.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._ghost.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self._ghost.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._ghost.hide()
 
         app = QApplication.instance()
         if app:
@@ -242,17 +250,28 @@ class LayerTreeWidget(QTreeWidget):
 
     @staticmethod
     def _is_pen_device(event):
-        """判断事件是否来自触控笔/橡皮等真实笔设备（排除鼠标型设备）"""
+        """判断事件是否来自触控笔/橡皮等真实笔设备
+        （用 pointerType 判断而非设备名字符串——真实 Krita 里设备名可能含 mouse 字样，
+        误判为鼠标会把笔事件放回不可靠的原生合成路径）"""
         try:
-            dev = event.deviceType()
+            pt = event.pointerType()
         except AttributeError:
-            return True  # 无法判断设备时按笔处理
+            # 拿不到指针类型：放宽为排除已知鼠标型设备
+            try:
+                dev = event.deviceType()
+                name = getattr(dev, 'name', None)
+                if name is not None:  # Qt6 QInputDevice.DeviceType
+                    return name.lower() not in ('mouse', 'touchscreen', 'touchpad')
+                return int(dev) != 6  # Qt5 QTabletEvent.TabletDevice: 6=Mouse
+            except Exception:
+                return True
         try:
-            name = str(dev).rsplit('.', 1)[-1].lower()
+            name = getattr(pt, 'name', None)
+            if name is not None:  # Qt6 QPointingDevice.PointerType
+                return name.lower() in ('pen', 'eraser')
+            return int(pt) in (0, 1)  # Qt5: 0=Pen, 1=Eraser
         except Exception:
             return True
-        # Qt6 的 QInputDevice.DeviceType.Mouse 是唯一需要排除的设备类型
-        return 'mouse' not in name
 
     @staticmethod
     def _make_mouse_event(ev_type, local, global_pos, button, buttons, modifiers):
@@ -324,8 +343,9 @@ class LayerTreeWidget(QTreeWidget):
         ev_type = event.type()
         # —— 数位笔事件（app 级拦截：无论投递目标是谁，落在树内即转译）——
         if ev_type in self._tablet_event_types() and self._is_pen_device(event):
-            if not self._tablet_in_viewport(event):
-                return super().eventFilter(obj, event)  # 树外：交给 Qt 原生处理
+            dragging = self._pen_grab is not None
+            if not dragging and not self._tablet_in_viewport(event):
+                return super().eventFilter(obj, event)  # 树外（且未在拖拽中）：交给 Qt 原生处理
             press_t, _move_t, rel_t = self._tablet_event_types()
             if self._is_native_drag_active():
                 # 拖拽循环中：让 Qt 原生合成 spontaneous 鼠标事件供 QDragManager 消费
@@ -572,6 +592,7 @@ class LayerTreeWidget(QTreeWidget):
                 self._pen_log("[pen] CUSTOM-DRAG start at %s" % pos)
                 self._pen_dragging = True
                 self._pen_drag_item = self.itemAt(self._press_pos)
+                self._show_pen_ghost()
                 self._pen_drag_update(pos)
                 return
         if getattr(self, '_press_pos', None) and (event.buttons() & Qt.MouseButton.LeftButton):
@@ -602,6 +623,7 @@ class LayerTreeWidget(QTreeWidget):
         if self._pen_active and getattr(self, '_pen_dragging', False):
             self._pen_log("[pen] CUSTOM-DROP release at %s" % (event.position().toPoint()))
             self._pen_dragging = False
+            self._hide_pen_ghost()
             self._finish_pen_drop(event.position().toPoint())
             self._pen_drag_item = None
             self._pen_drag_pos = None
@@ -640,20 +662,10 @@ class LayerTreeWidget(QTreeWidget):
         above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
         below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
         on_item = getattr(QAbstractItemView.DropIndicatorPosition, 'OnItem', None)
-        drop_ind = None
-        if target_item is not None:
-            rect = self.visualItemRect(target_item)
-            if rect.isValid():
-                mid_top = rect.top() + rect.height() * 0.33
-                mid_bot = rect.top() + rect.height() * 0.66
-                if y < mid_top:
-                    drop_ind = above
-                elif y > mid_bot:
-                    drop_ind = below
-                else:
-                    tw = self.itemWidget(target_item, 0)
-                    is_group = bool(tw and tw.node and tw.node.type() == "grouplayer")
-                    drop_ind = on_item if is_group else above
+        drop_ind = self._compute_drop_indicator(pos, target_item)
+        if drop_ind is not None:
+            # 拖拽虚影跟随笔尖（全局坐标）
+            self._move_pen_ghost(self.viewport().mapToGlobal(pos))
 
         self._drag_active = True
         self._drag_target_item = target_item
@@ -673,18 +685,78 @@ class LayerTreeWidget(QTreeWidget):
                 self._active_drag_pos = pos_str
         self.viewport().update()
 
+    def _show_pen_ghost(self):
+        """拖拽激活时抓取被拖行渲染图作为拖拽虚影（与鼠标拖拽的视觉反馈对齐）"""
+        try:
+            item = getattr(self, '_pen_drag_item', None)
+            if item is None:
+                return
+            w = self.itemWidget(item, 0)
+            if w is None:
+                return
+            pix = w.grab()
+            if pix is None or pix.isNull():
+                return
+            self._ghost.setPixmap(pix)
+            self._ghost.setWindowOpacity(0.85)
+            self._ghost.adjustSize()
+            gp = QCursor.pos()
+            self._ghost.move(gp.x() - pix.width() // 2, gp.y() - pix.height() // 2)
+            self._ghost.show()
+            self._ghost.raise_()
+        except Exception:
+            pass
+
+    def _move_pen_ghost(self, global_pos):
+        """拖拽虚影跟随笔尖移动"""
+        try:
+            if self._ghost.isVisible():
+                self._ghost.move(global_pos.x() - self._ghost.width() // 2,
+                                 global_pos.y() - self._ghost.height() // 2)
+        except Exception:
+            pass
+
+    def _hide_pen_ghost(self):
+        """拖拽结束：虚影淡出后隐藏"""
+        try:
+            if self._ghost.isVisible():
+                self._ghost.hide()
+        except Exception:
+            pass
+
+    def _compute_drop_indicator(self, pos, target_item):
+        """根据鼠标位置与目标行计算插入位置（近似 QAbstractItemView::dropIndicatorPosition）"""
+        above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
+        below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
+        on_item = getattr(QAbstractItemView.DropIndicatorPosition, 'OnItem', None)
+        if target_item is None:
+            return None
+        rect = self.visualItemRect(target_item)
+        if not rect.isValid():
+            return None
+        y = pos.y()
+        mid_top = rect.top() + rect.height() * 0.33
+        mid_bot = rect.top() + rect.height() * 0.66
+        if y < mid_top:
+            return above
+        if y > mid_bot:
+            return below
+        tw = self.itemWidget(target_item, 0)
+        is_group = bool(tw and tw.node and tw.node.type() == "grouplayer")
+        return on_item if is_group else above
+
     def _finish_pen_drop(self, pos):
-        """自定义笔拖拽落点：执行重排序（复用 dropEvent 的核心逻辑）"""
+        """自定义笔拖拽落点：以释放位置重算目标与插入位置，再执行重排序
+        （不再依赖最后 move 的缓存指示线位置，松手瞬间移动也不会落点错位）"""
+        dragged_item = getattr(self, '_pen_drag_item', None)
         target_item = self.itemAt(pos)
-        dragged_items = self.selectedItems()
-        if not target_item or not dragged_items:
+        if dragged_item is None or target_item is None:
             self._pen_log("[pen] drop aborted: no target/selection")
             return
-        dragged_item = dragged_items[0]
         if target_item == dragged_item:
             self._pen_log("[pen] drop aborted: same item")
             return
-        drop_ind = self._drag_drop_ind
+        drop_ind = self._compute_drop_indicator(pos, target_item)
         if drop_ind is None:
             self._pen_log("[pen] drop aborted: no drop indicator")
             return
