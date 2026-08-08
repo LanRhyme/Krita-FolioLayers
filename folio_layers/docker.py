@@ -148,14 +148,9 @@ class LayerTreeWidget(QTreeWidget):
         self._pen_dragging = False
         self._pen_drag_item = None
         self._pen_drag_pos = None
-        # 笔拖拽幽灵（模拟 Qt 原生 QDrag 的拖拽虚影，鼠标拖拽有、笔拖拽也必须有）
-        self._ghost = QLabel(None)
-        self._ghost.setWindowFlags(getattr(Qt, 'ToolTip', getattr(getattr(Qt, 'WindowType', None), 'ToolTip', 0))
-                                   | getattr(Qt, 'FramelessWindowHint', getattr(getattr(Qt, 'WindowType', None), 'FramelessWindowHint', 0)))
-        self._ghost.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self._ghost.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
-        self._ghost.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self._ghost.hide()
+        # 笔拖拽幽灵：抓取被拖行渲染图为 pixmap，在 paintEvent 里跟随光标绘制
+        # （不用独立 QLabel 窗口——高频 move 触发窗口重定位在 Wayland 合成器上开销大，是卡顿主因）
+        self._ghost_pixmap = None
 
         app = QApplication.instance()
         if app:
@@ -292,6 +287,16 @@ class LayerTreeWidget(QTreeWidget):
         viewport = self.viewport()
         press_t, move_t, rel_t = self._tablet_event_types()
         ev_type = event.type()
+
+        # 按住移动事件节流（~60Hz）：笔事件可达 200Hz，全量转译+重绘会积压卡顿；
+        # 节流的 move 仍被 filter accept，Qt 不会合成，位置以最近一次为准
+        if ev_type == move_t and event.buttons() != Qt.NoButton:
+            now = time.monotonic()
+            last = getattr(self, '_last_pen_move_ts', 0.0)
+            if now - last < 0.012:
+                self._pen_log("[pen] throttled move")
+                return
+            self._last_pen_move_ts = now
 
         global_pos = event.globalPosition() if hasattr(event, 'globalPosition') else event.globalPos()
 
@@ -461,6 +466,17 @@ class LayerTreeWidget(QTreeWidget):
                 p.setBrush(QColor(accent_col.red(), accent_col.green(), accent_col.blue(), 50))
                 p.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 4, 4)
 
+            # 拖拽虚影：被拖行渲染图跟随光标（半透明）
+            gpix = getattr(self, '_ghost_pixmap', None)
+            if gpix is not None and not gpix.isNull():
+                drag_pos = getattr(self, '_pen_drag_pos', None)
+                if drag_pos is None:
+                    drag_pos = self.viewport().mapFromGlobal(QCursor.pos())
+                p.setOpacity(0.85)
+                p.drawPixmap(drag_pos.x() - gpix.width() // 2,
+                             drag_pos.y() - gpix.height() // 2, gpix)
+                p.setOpacity(1.0)
+
             p.end()
 
     def _clear_drag_indicator(self):
@@ -570,10 +586,22 @@ class LayerTreeWidget(QTreeWidget):
         self._pen_drag_pos = None
         super().mousePressEvent(event)
 
+    def _event_is_pen_synth(self, event):
+        """Qt 由数位笔事件合成的鼠标事件（source == MouseEventSynthesizedByQt）——
+        某些 Wayland 合成器不提供 tablet 协议，笔事件全部走 Qt 鼠标合成路径，
+        此时同样走自定义拖拽（不依赖 QDragManager 消费 spontaneous 事件）"""
+        try:
+            src = event.source()
+            return src == Qt.MouseEventSource.MouseEventSynthesizedByQt
+        except Exception:
+            return False
+
     def mouseMoveEvent(self, event):
         pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
         # —— 数位笔拖拽：自定义驱动（不依赖 Qt 原生 QDrag 拖拽循环）——
-        if self._pen_active and (event.buttons() & Qt.MouseButton.LeftButton) \
+        # 触发条件：转译的 tablet press（_pen_active）或 Qt 合成的笔鼠标事件（_event_is_pen_synth）
+        if (self._pen_active or self._event_is_pen_synth(event)) \
+                and (event.buttons() & Qt.MouseButton.LeftButton) \
                 and getattr(self, '_press_pos', None):
             dx = pos.x() - self._press_pos.x()
             dy = pos.y() - self._press_pos.y()
@@ -624,7 +652,7 @@ class LayerTreeWidget(QTreeWidget):
 
     def mouseReleaseEvent(self, event):
         """数位笔拖拽完成：执行重排序"""
-        if self._pen_active and getattr(self, '_pen_dragging', False):
+        if (self._pen_active or self._event_is_pen_synth(event)) and getattr(self, '_pen_dragging', False):
             self._pen_log("[pen] CUSTOM-DROP release at %s" % (event.position().toPoint()))
             self._pen_dragging = False
             self._hide_pen_ghost()
@@ -634,6 +662,8 @@ class LayerTreeWidget(QTreeWidget):
             self._scroll_dir = 0
             self._auto_scroll_timer.stop()
             self._clear_drag_indicator()
+            # 交还 Qt 清理 QAbstractItemView 内部状态（pressedIndex 等）
+            super().mouseReleaseEvent(event)
             return
         super().mouseReleaseEvent(event)
 
@@ -660,6 +690,9 @@ class LayerTreeWidget(QTreeWidget):
             self._scroll_dir = 0
             self._scroll_step = 0
             self._auto_scroll_timer.stop()
+
+        # 记录当前视口坐标（paintEvent 按此绘制拖拽虚影）
+        self._pen_drag_pos = pos
 
         # 计算插入位置：Above / Below / On（空白处回退到最近行）
         target_item = self._resolve_drop_target(pos)
@@ -690,7 +723,7 @@ class LayerTreeWidget(QTreeWidget):
         self.viewport().update()
 
     def _show_pen_ghost(self):
-        """拖拽激活时抓取被拖行渲染图作为拖拽虚影（与鼠标拖拽的视觉反馈对齐）"""
+        """拖拽激活时抓取被拖行渲染图作为拖拽虚影（paintEvent 绘制，跟随光标）"""
         try:
             item = getattr(self, '_pen_drag_item', None)
             if item is None:
@@ -701,30 +734,23 @@ class LayerTreeWidget(QTreeWidget):
             pix = w.grab()
             if pix is None or pix.isNull():
                 return
-            self._ghost.setPixmap(pix)
-            self._ghost.setWindowOpacity(0.85)
-            self._ghost.adjustSize()
-            gp = QCursor.pos()
-            self._ghost.move(gp.x() - pix.width() // 2, gp.y() - pix.height() // 2)
-            self._ghost.show()
-            self._ghost.raise_()
+            self._ghost_pixmap = pix
+            self.viewport().update()
         except Exception:
             pass
 
     def _move_pen_ghost(self, global_pos):
-        """拖拽虚影跟随笔尖移动"""
+        """拖拽虚影位置由 paintEvent 按光标位置绘制，这里仅触发重绘"""
         try:
-            if self._ghost.isVisible():
-                self._ghost.move(global_pos.x() - self._ghost.width() // 2,
-                                 global_pos.y() - self._ghost.height() // 2)
+            self.viewport().update()
         except Exception:
             pass
 
     def _hide_pen_ghost(self):
-        """拖拽结束：虚影淡出后隐藏"""
+        """拖拽结束：清除虚影并重绘"""
         try:
-            if self._ghost.isVisible():
-                self._ghost.hide()
+            self._ghost_pixmap = None
+            self.viewport().update()
         except Exception:
             pass
 
