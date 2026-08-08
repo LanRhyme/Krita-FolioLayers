@@ -2,13 +2,14 @@
 """Folio Layer Docker - Native Qt Integration, Clean Dropdowns & Full Blending Modes"""
 
 import sys
+import os
 import time
 from collections import OrderedDict
 from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer,
     Qt, QSize, QRect, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
-    QEvent, QPainter, QPen, QPoint, QPointF, QMouseEvent, QPropertyAnimation, QEasingCurve, QLayout
+    QEvent, QPainter, QPen, QPoint, QPointF, QMouseEvent, QPropertyAnimation, QEasingCurve, QLayout, QDrag
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
@@ -132,6 +133,13 @@ class LayerTreeWidget(QTreeWidget):
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
         self.viewport().installEventFilter(self)
+        # 数位笔：让无按钮的悬停移动（TabletMove）也投递到控件，Qt 才能合成
+        # 悬停鼠标事件（部分 Qt 版本默认不投递悬停，导致笔 hover 无提示/无高亮）
+        self.viewport().setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
+        w = self.window()
+        if w is not None:
+            w.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
 
         # 数位笔拖拽支持：笔按下时锁定的目标控件（模拟 Qt 鼠标抓取语义）
         self._pen_grab = None
@@ -218,6 +226,15 @@ class LayerTreeWidget(QTreeWidget):
             )
         return LayerTreeWidget._TABLET_TYPES
 
+    def _pen_log(self, msg):
+        """数位笔调试日志：设置环境变量 FOLIO_PEN_DEBUG=1 后写入 ~/tmp/folio-pen.log"""
+        if os.environ.get("FOLIO_PEN_DEBUG"):
+            try:
+                with open(os.path.expanduser("~/tmp/folio-pen.log"), "a") as f:
+                    f.write("%.3f %s\n" % (time.time(), msg))
+            except Exception:
+                pass
+
     @staticmethod
     def _is_pen_device(event):
         """判断事件是否来自触控笔/橡皮等真实笔设备（排除鼠标型设备）"""
@@ -241,7 +258,7 @@ class LayerTreeWidget(QTreeWidget):
         return QMouseEvent(ev_type, QPointF(local), button, buttons, modifiers)
 
     def _handle_tablet_as_mouse(self, event):
-        """把落在图层树上的触控笔事件转译为等价的鼠标事件注入 viewport，
+        """把落在图层树上的触控笔事件转译为等价的鼠标事件注入，
         让 QAbstractItemView 的原生拖拽排序能用数位笔触发
         （Qt 仅在 tablet 事件未被 accept 时合成鼠标事件，某些平台/合成器下不可靠）"""
         viewport = self.viewport()
@@ -256,6 +273,8 @@ class LayerTreeWidget(QTreeWidget):
             if w is None or not (w == self or self.isAncestorOf(w)):
                 w = viewport
             self._pen_grab = w
+            self._pen_log("[pen] press grab=%s buttons=%s pos=%s" % (
+                w.__class__.__name__ if w else None, event.buttons(), global_pos.toPoint()))
 
         receiver = self._pen_grab if self._pen_grab is not None else viewport
 
@@ -267,19 +286,53 @@ class LayerTreeWidget(QTreeWidget):
 
         local = receiver.mapFromGlobal(global_pos.toPoint())
         me = self._make_mouse_event(mouse_type, local, global_pos, event.button(), event.buttons(), event.modifiers())
+        self._pen_log("[pen] -> %s -> %s buttons=%s" % (getattr(mouse_type, 'name', mouse_type), receiver.__class__.__name__, event.buttons()))
         QApplication.sendEvent(receiver, me)
 
         if ev_type == rel_t:
             self._pen_grab = None
 
+    def _tablet_in_viewport(self, event):
+        """事件全局坐标是否落在图层树 viewport 内"""
+        vp = self.viewport()
+        if not vp.isVisible():
+            return False
+        gp = event.globalPosition() if hasattr(event, 'globalPosition') else event.globalPos()
+        vp_tl = vp.mapToGlobal(QPoint(0, 0))
+        return vp.rect().translated(vp_tl).contains(gp.toPoint())
+
+    def _drag_active(self):
+        """QDrag::exec 拖拽循环中：此时必须让 Qt 原生合成鼠标事件
+        （spontaneous 事件才能被 QDragManager 消费），我们的注入事件到不了它"""
+        try:
+            return QDrag.activeDrag() is not None
+        except Exception:
+            return False
+
     def eventFilter(self, obj, event):
+        ev_type = event.type()
+        # —— 数位笔事件（app 级拦截：无论投递目标是谁，落在树内即转译）——
+        if ev_type in self._tablet_event_types() and self._is_pen_device(event):
+            if not self._tablet_in_viewport(event):
+                return super().eventFilter(obj, event)  # 树外：交给 Qt 原生处理
+            press_t, _move_t, rel_t = self._tablet_event_types()
+            if self._drag_active():
+                # 拖拽循环中：让 Qt 原生合成 spontaneous 鼠标事件供 QDragManager 消费
+                self._pen_log("[pen] drag-loop bypass %s buttons=%s" % (getattr(ev_type, 'name', ev_type), event.buttons()))
+                return super().eventFilter(obj, event)
+            if ev_type == _move_t and event.buttons() == Qt.NoButton:
+                # 悬停移动：不拦截，让 Qt 原生合成 spontaneous 事件以触发 tooltip/高亮
+                self._pen_log("[pen] hover bypass %s pos=%s" % (getattr(ev_type, 'name', ev_type), event.position().toPoint()))
+                return super().eventFilter(obj, event)
+            if ev_type == rel_t and self._pen_grab is None:
+                # 无按压状态的释放（异常路径）：不处理
+                return super().eventFilter(obj, event)
+            # 按下 / 按住移动 / 释放：转译为鼠标事件注入
+            self._handle_tablet_as_mouse(event)
+            event.accept()
+            return True
+        # —— viewport 内其余事件 ——
         if obj == self.viewport():
-            ev_type = event.type()
-            # 数位笔事件：转译为鼠标事件后吞掉原始事件（阻止 Qt 重复合成，避免双重触发）
-            if ev_type in self._tablet_event_types() and self._is_pen_device(event):
-                self._handle_tablet_as_mouse(event)
-                event.accept()
-                return True
             ev_mouse_move = getattr(QEvent, 'MouseMove', getattr(getattr(QEvent, 'Type', None), 'MouseMove', None))
             if ev_type == ev_mouse_move:
                 global_pos = QCursor.pos()
@@ -462,8 +515,14 @@ class LayerTreeWidget(QTreeWidget):
         for i in range(item.childCount()):
             self._close_item_swipe_recursive(item.child(i))
 
+    def startDrag(self, supportedActions):
+        """记录拖拽启动（数位笔调试用）"""
+        self._pen_log("[pen] START-DRAG actions=%s" % supportedActions)
+        super().startDrag(supportedActions)
+
     def mousePressEvent(self, event):
         """记录点击起点，关闭其他划出的面板，并在点击空白区域时不取消选中"""
+        self._pen_log("[pen] tree mousePress pos=%s buttons=%s" % (event.position().toPoint(), event.buttons()))
         self._close_all_swipes()
         item = self.itemAt(event.pos())
         if item is None:
@@ -497,6 +556,7 @@ class LayerTreeWidget(QTreeWidget):
         super().mouseMoveEvent(event)
 
     def dropEvent(self, event):
+        self._pen_log("[pen] dropEvent selected=%d source=%s" % (len(self.selectedItems()), getattr(event, 'source', lambda: None)() or 'None'))
         self._scroll_dir = 0
         self._auto_scroll_timer.stop()
         self._clear_drag_indicator()
@@ -680,6 +740,10 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.tree.itemExpanded.connect(self._on_item_expanded)
 
         main_layout.addWidget(self.tree, 1)
+
+        # 数位笔：给面板各区域开启 TabletTracking——否则无按钮悬停 TabletMove
+        # 会在控件层被 Qt 吞掉（不传播），笔 hover 工具栏/属性栏无 tooltip
+        self._enable_tablet_tracking_recursive(self.main_widget if IN_KRITA else self)
 
         # 悬停预览守卫：补偿子控件/空白区不派发 leaveEvent 的情况，
         # 定期确认鼠标是否仍在图层列表或已显示的预览卡片内
@@ -1000,7 +1064,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
     def _toolbar_icon_size(self) -> int:
         """顶部导航栏图标大小 (px)"""
         cfg = get_config()
-        return max(10, min(24, cfg.toolbar_icon_size))
+        return max(10, min(48, cfg.toolbar_icon_size))
 
     def _toolbar_btn_size(self) -> int:
         """导航栏按钮外框大小 = 图标 + 内边距"""
@@ -1040,6 +1104,19 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._apply_responsive_toolbar()
+
+    @staticmethod
+    def _enable_tablet_tracking_recursive(widget):
+        """递归开启 widget 子树所有控件的 WA_TabletTracking
+        （数位笔悬停事件不被 Qt 吞掉的前提，支持 tooltip 与高亮）"""
+        if widget is None:
+            return
+        widget.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
+        try:
+            for w in widget.findChildren(QWidget):
+                w.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
+        except Exception:
+            pass
 
     def _build_toolbar(self, parent_layout):
         self.toolbar_frame = QFrame()

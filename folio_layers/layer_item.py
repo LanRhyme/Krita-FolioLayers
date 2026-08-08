@@ -190,14 +190,19 @@ class LayerRowWidget(QWidget):
         # 开启所有子控件鼠标跟踪，并挂载事件过滤器，精准捕获 40x40 缩略图、图标和名称上的移动事件
         self.setMouseTracking(True)
         self.installEventFilter(self)
+        # 数位笔：行控件及其子控件开启 TabletTracking——否则无按钮的悬停
+        # TabletMove 会在控件层被 Qt 直接吞掉（不传播），笔 hover 无 tooltip/高亮
+        self.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
         for sub in (self.select_btn, self.color_bar, self.expand_btn, self.thumb_label,
                     self.type_icon, self.name_label, self.sub_info_widget,
                     self.blend_label, self.opacity_label, self.size_label):
             sub.setMouseTracking(True)
             sub.installEventFilter(self)
+            sub.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
         if hasattr(self, 'indent_spacer') and self.indent_spacer:
             self.indent_spacer.setMouseTracking(True)
             self.indent_spacer.installEventFilter(self)
+            self.indent_spacer.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
 
         # ====== 建立悬浮滑动操作面板 (极简 Morandi 无边缝滑动层) ======
         self.swipe_container = QWidget(self)
@@ -283,6 +288,10 @@ class LayerRowWidget(QWidget):
         s_layout.addWidget(self.btn_swipe_solo)
         s_layout.addWidget(self.btn_swipe_del)
         self.swipe_container.hide()
+        # 滑动面板及其按钮同样需要 TabletTracking，笔 hover 时才不会被 Qt 吞掉
+        self.swipe_container.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
+        for sw in (self.btn_swipe_select, self.btn_swipe_solo, self.btn_swipe_del):
+            sw.setAttribute(Qt.WidgetAttribute.WA_TabletTracking, True)
 
         self._init_native_styles()
         self.refresh_state()
