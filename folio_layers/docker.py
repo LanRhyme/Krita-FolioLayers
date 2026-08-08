@@ -143,6 +143,11 @@ class LayerTreeWidget(QTreeWidget):
 
         # 数位笔拖拽支持：笔按下时锁定的目标控件（模拟 Qt 鼠标抓取语义）
         self._pen_grab = None
+        # 自定义笔拖拽状态（完全绕过 QDrag 拖拽循环，笔拖拽由本类自己驱动）
+        self._pen_active = False  # 当前按压序列来自数位笔（事件传播会重建 QMouseEvent，标记会丢，故用实例状态）
+        self._pen_dragging = False
+        self._pen_drag_item = None
+        self._pen_drag_pos = None
 
         app = QApplication.instance()
         if app:
@@ -268,6 +273,7 @@ class LayerTreeWidget(QTreeWidget):
         global_pos = event.globalPosition() if hasattr(event, 'globalPosition') else event.globalPos()
 
         if ev_type == press_t:
+            self._pen_active = True
             # 笔按下：锁定触点下方最深控件，模拟 Qt 的 qt_button_down 抓取语义
             w = QApplication.widgetAt(global_pos.toPoint())
             if w is None or not (w == self or self.isAncestorOf(w)):
@@ -286,11 +292,16 @@ class LayerTreeWidget(QTreeWidget):
 
         local = receiver.mapFromGlobal(global_pos.toPoint())
         me = self._make_mouse_event(mouse_type, local, global_pos, event.button(), event.buttons(), event.modifiers())
+        try:
+            me._folio_pen = True  # 标记为笔转译事件（自定义拖拽用）
+        except Exception:
+            pass
         self._pen_log("[pen] -> %s -> %s buttons=%s" % (getattr(mouse_type, 'name', mouse_type), receiver.__class__.__name__, event.buttons()))
         QApplication.sendEvent(receiver, me)
 
         if ev_type == rel_t:
             self._pen_grab = None
+            self._pen_active = False
 
     def _tablet_in_viewport(self, event):
         """事件全局坐标是否落在图层树 viewport 内"""
@@ -301,7 +312,7 @@ class LayerTreeWidget(QTreeWidget):
         vp_tl = vp.mapToGlobal(QPoint(0, 0))
         return vp.rect().translated(vp_tl).contains(gp.toPoint())
 
-    def _drag_active(self):
+    def _is_native_drag_active(self):
         """QDrag::exec 拖拽循环中：此时必须让 Qt 原生合成鼠标事件
         （spontaneous 事件才能被 QDragManager 消费），我们的注入事件到不了它"""
         try:
@@ -316,7 +327,7 @@ class LayerTreeWidget(QTreeWidget):
             if not self._tablet_in_viewport(event):
                 return super().eventFilter(obj, event)  # 树外：交给 Qt 原生处理
             press_t, _move_t, rel_t = self._tablet_event_types()
-            if self._drag_active():
+            if self._is_native_drag_active():
                 # 拖拽循环中：让 Qt 原生合成 spontaneous 鼠标事件供 QDragManager 消费
                 self._pen_log("[pen] drag-loop bypass %s buttons=%s" % (getattr(ev_type, 'name', ev_type), event.buttons()))
                 return super().eventFilter(obj, event)
@@ -529,15 +540,37 @@ class LayerTreeWidget(QTreeWidget):
             return
         self._press_pos = event.pos()
         self._is_horizontal_swipe = False
+        # 自定义笔拖拽：新一轮按下重置状态
+        self._pen_dragging = False
+        self._pen_drag_item = None
+        self._pen_drag_pos = None
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
+        # —— 数位笔拖拽：自定义驱动（不依赖 Qt 原生 QDrag 拖拽循环）——
+        if self._pen_active and (event.buttons() & Qt.MouseButton.LeftButton) \
+                and getattr(self, '_press_pos', None):
+            dx = pos.x() - self._press_pos.x()
+            dy = pos.y() - self._press_pos.y()
+            if getattr(self, '_pen_dragging', False):
+                # 拖拽中：更新插入指示线 / 边缘自动滚动
+                self._pen_drag_update(pos)
+                return
+            # 未激活：位移超过阈值后进入拖拽模式（左滑手势优先判定）
+            if not (dx < -15 and abs(dx) > abs(dy) * 1.2) \
+                    and (pos - self._press_pos).manhattanLength() > QApplication.startDragDistance():
+                self._pen_log("[pen] CUSTOM-DRAG start at %s" % pos)
+                self._pen_dragging = True
+                self._pen_drag_item = self.itemAt(self._press_pos)
+                self._pen_drag_update(pos)
+                return
         if getattr(self, '_press_pos', None) and (event.buttons() & Qt.MouseButton.LeftButton):
             dx = pos.x() - self._press_pos.x()
             dy = pos.y() - self._press_pos.y()
             # 左划手势判断：水平位移明显大于垂直位移，且 dx < -15px
             if dx < -15 and abs(dx) > abs(dy) * 1.2:
+                self._pen_log("[pen] SWIPE-TRIGGERED dx=%d dy=%d (drag blocked!)" % (dx, dy))
                 self._is_horizontal_swipe = True
                 item = self.itemAt(self._press_pos)
                 if item:
@@ -554,6 +587,204 @@ class LayerTreeWidget(QTreeWidget):
                         w.close_swipe()
                 return
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """数位笔拖拽完成：执行重排序"""
+        if self._pen_active and getattr(self, '_pen_dragging', False):
+            self._pen_log("[pen] CUSTOM-DROP release at %s" % (event.position().toPoint()))
+            self._pen_dragging = False
+            self._finish_pen_drop(event.position().toPoint())
+            self._pen_drag_item = None
+            self._pen_drag_pos = None
+            self._scroll_dir = 0
+            self._auto_scroll_timer.stop()
+            self._clear_drag_indicator()
+            return
+        super().mouseReleaseEvent(event)
+
+    def _pen_drag_update(self, pos):
+        """自定义笔拖拽：更新插入指示线与边缘自动滚动（复刻 dragMoveEvent 逻辑）"""
+        margin = 55
+        vp = self.viewport()
+        y = pos.y()
+        if y < margin:
+            dist = max(0, y)
+            ratio = (margin - dist) / margin
+            self._scroll_step = -int(2 + ratio * 6)
+            self._scroll_dir = -1
+            if not self._auto_scroll_timer.isActive():
+                self._auto_scroll_timer.start()
+        elif vp.height() - y < margin:
+            dist = max(0, vp.height() - y)
+            ratio = (margin - dist) / margin
+            self._scroll_step = int(2 + ratio * 6)
+            self._scroll_dir = 1
+            if not self._auto_scroll_timer.isActive():
+                self._auto_scroll_timer.start()
+        else:
+            self._scroll_dir = 0
+            self._scroll_step = 0
+            self._auto_scroll_timer.stop()
+
+        # 计算插入位置：Above / Below / On（近似 QAbstractItemView::dropIndicatorPosition）
+        target_item = self.itemAt(pos)
+        above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
+        below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
+        on_item = getattr(QAbstractItemView.DropIndicatorPosition, 'OnItem', None)
+        drop_ind = None
+        if target_item is not None:
+            rect = self.visualItemRect(target_item)
+            if rect.isValid():
+                mid_top = rect.top() + rect.height() * 0.33
+                mid_bot = rect.top() + rect.height() * 0.66
+                if y < mid_top:
+                    drop_ind = above
+                elif y > mid_bot:
+                    drop_ind = below
+                else:
+                    tw = self.itemWidget(target_item, 0)
+                    is_group = bool(tw and tw.node and tw.node.type() == "grouplayer")
+                    drop_ind = on_item if is_group else above
+
+        self._drag_active = True
+        self._drag_target_item = target_item
+        self._drag_drop_ind = drop_ind
+
+        target_widget = self.itemWidget(target_item, 0) if target_item else None
+        pos_str = "above" if drop_ind == above else ("below" if drop_ind == below else ("on" if drop_ind == on_item else None))
+        if getattr(self, '_active_drag_widget', None) != target_widget or getattr(self, '_active_drag_pos', None) != pos_str:
+            if getattr(self, '_active_drag_widget', None) is not None:
+                try:
+                    self._active_drag_widget.set_drop_indicator(None)
+                except Exception:
+                    pass
+            if target_widget and hasattr(target_widget, 'set_drop_indicator'):
+                target_widget.set_drop_indicator(pos_str)
+                self._active_drag_widget = target_widget
+                self._active_drag_pos = pos_str
+        self.viewport().update()
+
+    def _finish_pen_drop(self, pos):
+        """自定义笔拖拽落点：执行重排序（复用 dropEvent 的核心逻辑）"""
+        target_item = self.itemAt(pos)
+        dragged_items = self.selectedItems()
+        if not target_item or not dragged_items:
+            self._pen_log("[pen] drop aborted: no target/selection")
+            return
+        dragged_item = dragged_items[0]
+        if target_item == dragged_item:
+            self._pen_log("[pen] drop aborted: same item")
+            return
+        drop_ind = self._drag_drop_ind
+        if drop_ind is None:
+            self._pen_log("[pen] drop aborted: no drop indicator")
+            return
+        self._pen_log("[pen] execute reorder drag=%s target=%s ind=%s" % (
+            dragged_item.text(0) if dragged_item else "?",
+            target_item.text(0) if target_item else "?", drop_ind))
+        self._execute_reorder(dragged_item, target_item, drop_ind)
+
+    def _execute_reorder(self, dragged_item, target_item, drop_ind):
+        """dropEvent 重排序核心逻辑（鼠标拖拽与自定义笔拖拽共用）"""
+        dragged_widget = self.itemWidget(dragged_item, 0)
+        target_widget = self.itemWidget(target_item, 0)
+        drag_node = dragged_widget.node if dragged_widget else None
+        target_node = target_widget.node if target_widget else None
+        if not drag_node or not target_node:
+            return
+        if not IN_KRITA:
+            return
+        doc = Krita.instance().activeDocument()
+        if not doc:
+            return
+
+        def _backup_subtree(node):
+            if node.type() != "grouplayer":
+                return None
+            backup = []
+            for child in list(node.childNodes()):
+                backup.append((child, _backup_subtree(child)))
+            return backup
+
+        def _reattach_subtree(group, backup):
+            if group is None or not backup:
+                return
+            for child, sub_backup in backup:
+                try:
+                    cur_parent = child.parentNode()
+                    if cur_parent is None or cur_parent.uniqueId() != group.uniqueId():
+                        group.addChildNode(child, None)
+                except Exception:
+                    pass
+                if sub_backup:
+                    _reattach_subtree(child, sub_backup)
+
+        def _reorder_with_children(drag_node, new_parent, above_sibling):
+            # Krita 官方规则：如果被拖拽图层处于锁定状态 (locked)，保留原图层，在目标位置克隆副本（带 - 副本 后缀）
+            if drag_node.locked():
+                cloned_node = drag_node.duplicate()
+                try:
+                    cloned_node.setName(f"{drag_node.name()} - 副本")
+                except Exception:
+                    pass
+                try:
+                    cloned_node.setLocked(False)
+                except Exception:
+                    pass
+                new_parent.addChildNode(cloned_node, above_sibling)
+                doc.setActiveNode(cloned_node)
+                return
+
+            is_group = drag_node.type() == "grouplayer"
+            saved_tree = _backup_subtree(drag_node) if is_group else None
+            old_parent = drag_node.parentNode()
+            if old_parent is None:
+                return
+            try:
+                old_parent.removeChildNode(drag_node)
+            except Exception:
+                return
+            try:
+                new_parent.addChildNode(drag_node, above_sibling)
+            except Exception:
+                return
+            if is_group and saved_tree:
+                _reattach_subtree(drag_node, saved_tree)
+
+        above = getattr(QAbstractItemView.DropIndicatorPosition, 'AboveItem', None)
+        below = getattr(QAbstractItemView.DropIndicatorPosition, 'BelowItem', None)
+        on_item = getattr(QAbstractItemView.DropIndicatorPosition, 'OnItem', None)
+
+        if drop_ind == on_item:
+            if target_node.type() == "grouplayer":
+                if drag_node.uniqueId() == target_node.uniqueId():
+                    return
+                old_parent = drag_node.parentNode()
+                if old_parent and old_parent.uniqueId() == target_node.uniqueId():
+                    return
+                children = list(target_node.childNodes())
+                first_child = children[-1] if children else None
+                _reorder_with_children(drag_node, target_node, first_child)
+            else:
+                return
+        elif drop_ind == above:
+            parent = target_node.parentNode()
+            if not parent or parent.uniqueId() == drag_node.uniqueId():
+                return
+            _reorder_with_children(drag_node, parent, target_node)
+        elif drop_ind == below:
+            parent = target_node.parentNode()
+            if not parent or parent.uniqueId() == drag_node.uniqueId():
+                return
+            siblings = parent.childNodes()
+            idx = next((i for i, n in enumerate(siblings) if n.uniqueId() == target_node.uniqueId()), -1)
+            if idx < 0:
+                return
+            above_sibling = siblings[idx - 1] if idx > 0 else None
+            _reorder_with_children(drag_node, parent, above_sibling)
+
+        doc.refreshProjection()
+        QTimer.singleShot(50, self.docker.refresh_tree)
 
     def dropEvent(self, event):
         self._pen_log("[pen] dropEvent selected=%d source=%s" % (len(self.selectedItems()), getattr(event, 'source', lambda: None)() or 'None'))
