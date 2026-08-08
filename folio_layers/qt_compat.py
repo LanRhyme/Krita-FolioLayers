@@ -4,7 +4,7 @@
 try:
     from PyQt6.QtCore import (
         Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QPointF, QRect, QEvent, QTimer, QByteArray,
-        QMimeData, QSettings, QPropertyAnimation, QEasingCurve
+        QMimeData, QSettings, QPropertyAnimation, QEasingCurve, QAbstractListModel, QModelIndex, QVariant, QUrl
     )
     from PyQt6.QtGui import (
         QPainter, QColor, QFont, QPen, QBrush, QIcon, QPixmap, QImage, QCursor, QDrag,
@@ -16,6 +16,7 @@ try:
         QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
         QHeaderView, QLineEdit, QAbstractItemView, QDialog, QCheckBox, QGroupBox, QLayout
     )
+    from PyQt6.QtQuickWidgets import QQuickWidget
     from PyQt6.QtSvg import QSvgRenderer
 
     def _fix_qt_enum(enum_cls, names):
@@ -49,7 +50,7 @@ try:
 except ImportError:
     from PyQt5.QtCore import (
         Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QPointF, QRect, QEvent, QTimer, QByteArray,
-        QMimeData, QSettings, QPropertyAnimation, QEasingCurve
+        QMimeData, QSettings, QPropertyAnimation, QEasingCurve, QAbstractListModel, QModelIndex, QVariant, QUrl
     )
     from PyQt5.QtGui import (
         QPainter, QColor, QFont, QPen, QBrush, QIcon, QPixmap, QImage, QCursor, QDrag,
@@ -61,4 +62,5 @@ except ImportError:
         QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
         QHeaderView, QLineEdit, QAction, QAbstractItemView, QDialog, QCheckBox, QGroupBox, QLayout
     )
+    from PyQt5.QtQuickWidgets import QQuickWidget
     from PyQt5.QtSvg import QSvgRenderer
