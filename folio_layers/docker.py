@@ -557,9 +557,18 @@ class LayerTreeWidget(QTreeWidget):
                 # 拖拽中：更新插入指示线 / 边缘自动滚动
                 self._pen_drag_update(pos)
                 return
-            # 未激活：位移超过阈值后进入拖拽模式（左滑手势优先判定）
-            if not (dx < -15 and abs(dx) > abs(dy) * 1.2) \
-                    and (pos - self._press_pos).manhattanLength() > QApplication.startDragDistance():
+            # 笔路径：拖拽优先——左滑手势只在近乎纯水平（|dy| < 6px）时触发，
+            # 避免笔拖拽轨迹稍带水平分量就被误判为滑动而截断拖拽
+            if abs(dy) < 6 and dx < -10:
+                self._pen_log("[pen] PEN-SWIPE dx=%d dy=%d" % (dx, dy))
+                self._is_horizontal_swipe = True
+                item = self.itemAt(self._press_pos)
+                if item:
+                    w = self.itemWidget(item, 0)
+                    if w and hasattr(w, 'open_swipe'):
+                        w.open_swipe()
+                return
+            if (pos - self._press_pos).manhattanLength() > QApplication.startDragDistance():
                 self._pen_log("[pen] CUSTOM-DRAG start at %s" % pos)
                 self._pen_dragging = True
                 self._pen_drag_item = self.itemAt(self._press_pos)
