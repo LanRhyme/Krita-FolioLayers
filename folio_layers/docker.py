@@ -251,25 +251,29 @@ class LayerTreeWidget(QTreeWidget):
     @staticmethod
     def _is_pen_device(event):
         """判断事件是否来自触控笔/橡皮等真实笔设备
-        （用 pointerType 判断而非设备名字符串——真实 Krita 里设备名可能含 mouse 字样，
-        误判为鼠标会把笔事件放回不可靠的原生合成路径）"""
+        宽松策略：只明确排除鼠标型设备，其余一律按笔转译——
+        笔事件被转译成鼠标事件是等效操作，而漏掉笔事件会退回不可靠的原生合成
+        （注意不能用严格的 pointerType 判断：真实 Krita 里笔的 pointerType 名
+        可能不匹配 Pen/Eraser，会把笔事件误判为鼠标导致完全无法拖拽）"""
         try:
             pt = event.pointerType()
-        except AttributeError:
-            # 拿不到指针类型：放宽为排除已知鼠标型设备
-            try:
-                dev = event.deviceType()
-                name = getattr(dev, 'name', None)
-                if name is not None:  # Qt6 QInputDevice.DeviceType
-                    return name.lower() not in ('mouse', 'touchscreen', 'touchpad')
-                return int(dev) != 6  # Qt5 QTabletEvent.TabletDevice: 6=Mouse
-            except Exception:
+            pname = getattr(pt, 'name', None)
+            if pname is not None:
+                pln = pname.lower()
+                if pln in ('pen', 'eraser'):
+                    return True
+                # Qt5 枚举值 0=Pen 1=Eraser
+            elif int(pt) in (0, 1):
                 return True
+        except Exception:
+            pass
         try:
-            name = getattr(pt, 'name', None)
-            if name is not None:  # Qt6 QPointingDevice.PointerType
-                return name.lower() in ('pen', 'eraser')
-            return int(pt) in (0, 1)  # Qt5: 0=Pen, 1=Eraser
+            dev = event.deviceType()
+            name = getattr(dev, 'name', None)
+            if name is not None:  # Qt6 QInputDevice.DeviceType
+                ln = name.lower()
+                return ln not in ('mouse', 'touchscreen', 'touchpad')
+            return int(dev) != 6  # Qt5 QTabletEvent.TabletDevice: 6=Mouse
         except Exception:
             return True
 
@@ -853,6 +857,13 @@ class LayerTreeWidget(QTreeWidget):
             old_parent = drag_node.parentNode()
             if old_parent is None:
                 return
+            # 保护：above_sibling 恰好是被拖节点自身（拖到紧邻下方）→ 位置不变，直接返回
+            if above_sibling is not None and above_sibling.uniqueId() == drag_node.uniqueId():
+                return
+            # 记录原位置（失败回滚用，防止 remove 后 add 失败导致图层丢失）
+            old_siblings = list(old_parent.childNodes())
+            old_idx = next((i for i, n in enumerate(old_siblings) if n.uniqueId() == drag_node.uniqueId()), -1)
+            old_above = old_siblings[old_idx - 1] if old_idx > 0 else None
             try:
                 old_parent.removeChildNode(drag_node)
             except Exception:
@@ -860,6 +871,14 @@ class LayerTreeWidget(QTreeWidget):
             try:
                 new_parent.addChildNode(drag_node, above_sibling)
             except Exception:
+                # 回滚：把节点放回原父的原位置，绝不丢失
+                try:
+                    old_parent.addChildNode(drag_node, old_above)
+                except Exception:
+                    try:
+                        old_parent.addChildNode(drag_node, None)
+                    except Exception:
+                        pass
                 return
             if is_group and saved_tree:
                 _reattach_subtree(drag_node, saved_tree)
@@ -982,6 +1001,13 @@ class LayerTreeWidget(QTreeWidget):
             old_parent = drag_node.parentNode()
             if old_parent is None:
                 return
+            # 保护：above_sibling 恰好是被拖节点自身（拖到紧邻下方）→ 位置不变，直接返回
+            if above_sibling is not None and above_sibling.uniqueId() == drag_node.uniqueId():
+                return
+            # 记录原位置（失败回滚用，防止 remove 后 add 失败导致图层丢失）
+            old_siblings = list(old_parent.childNodes())
+            old_idx = next((i for i, n in enumerate(old_siblings) if n.uniqueId() == drag_node.uniqueId()), -1)
+            old_above = old_siblings[old_idx - 1] if old_idx > 0 else None
             try:
                 old_parent.removeChildNode(drag_node)
             except Exception:
@@ -989,6 +1015,14 @@ class LayerTreeWidget(QTreeWidget):
             try:
                 new_parent.addChildNode(drag_node, above_sibling)
             except Exception:
+                # 回滚：把节点放回原父的原位置，绝不丢失
+                try:
+                    old_parent.addChildNode(drag_node, old_above)
+                except Exception:
+                    try:
+                        old_parent.addChildNode(drag_node, None)
+                    except Exception:
+                        pass
                 return
             if is_group and saved_tree:
                 _reattach_subtree(drag_node, saved_tree)
