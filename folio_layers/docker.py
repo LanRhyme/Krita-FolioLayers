@@ -30,6 +30,7 @@ try:
 except ImportError:
     IN_KRITA = False
     DockWidget = QWidget
+    Krita = None  # type: ignore[assignment]
 
 
 class FlowLayout(QLayout):
@@ -1169,6 +1170,8 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
 
         # 组展开状态：None=首次加载（默认展开），set()=已跟踪
         self._expanded_uids = None
+        # 最近一次滚动跟随的活动图层 uid（仅当 activeNode 变化时才滚动，避免拉回用户浏览位置）
+        self._last_followed_uid = None
 
         # 5. 定时刷新与 Krita 事件挂载
         self.sync_timer = QTimer(self)
@@ -1936,6 +1939,9 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.tree.setUpdatesEnabled(True)
         self._updating_ui = False
 
+        # 外部切换当前图层（如 PgUp/PgDn 或 Krita 官方面板）后，滚动树到新当前图层
+        self._follow_active_layer_if_changed()
+
     def _sync_node_tree(self, parent_node, parent_tree_item, active_node):
         from .layer_item import LayerRowWidget
         from .config import get_config
@@ -2069,6 +2075,49 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         self.refresh_tree()
         self._lazy_refresh_stale_thumbs()
 
+    def _find_tree_item_by_uid(self, target_uid):
+        """按图层 uniqueId 递归查找树项（含嵌套组）"""
+        def walk(parent_item):
+            cnt = parent_item.childCount() if parent_item else self.tree.topLevelItemCount()
+            for i in range(cnt):
+                it = parent_item.child(i) if parent_item else self.tree.topLevelItem(i)
+                w = self.tree.itemWidget(it, 0)
+                if w and getattr(w, 'node', None) and str(w.node.uniqueId()) == target_uid:
+                    return it
+                r = walk(it)
+                if r is not None:
+                    return r
+            return None
+        return walk(None)
+
+    def _follow_active_layer_if_changed(self):
+        """活动图层变化时滚动树到当前图层（PgUp/PgDn 等外部切换场景）
+
+        仅在 activeNode 与上次跟随的 uid 不同时滚动，避免 600ms 轮询
+        把用户手动滚动浏览的位置强制拉回"""
+        if not IN_KRITA or self._updating_ui or self._loading:
+            return
+        if time.monotonic() - getattr(self, '_last_scroll_ts', 0.0) < 0.5:
+            return  # 用户滚动中/刚滚动完：不打断
+        doc = Krita.instance().activeDocument()
+        if not doc:
+            return
+        node = doc.activeNode()
+        if not node:
+            return
+        target_uid = str(node.uniqueId())
+        if target_uid == self._last_followed_uid:
+            return
+        self._last_followed_uid = target_uid
+        # 多选状态：不干扰选择（但已记录 uid，避免取消多选后误滚）
+        if len(getattr(self, '_selected_uids', set())) > 1:
+            return
+        item = self._find_tree_item_by_uid(target_uid)
+        if item is None:
+            return
+        # PyQt5 5.15 与 PyQt6 均存在 QAbstractItemView.ScrollHint.EnsureVisible
+        self.tree.scrollToItem(item, QAbstractItemView.ScrollHint.EnsureVisible)
+
     def _lazy_refresh_stale_thumbs(self):
         """周期兜底：可见项缩略图生成超过 1s 则重载（Krita 6 无内容修改信号，靠此保证更新）"""
         now = time.monotonic()
@@ -2076,7 +2125,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         def _check(item):
             nonlocal stale
             w = self.tree.itemWidget(item, 0)
-            if w and w.node and w._is_tree_visible():
+            if isinstance(w, LayerRowWidget) and w.node and w._is_tree_visible():
                 if now - getattr(w, '_thumb_generated_ts', 0.0) > 1.0:
                     stale = True
                     w._thumb_timer.start()
@@ -2094,7 +2143,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         for i in range(item.childCount()):
             child_item = item.child(i)
             w = self.tree.itemWidget(child_item, 0)
-            if w:
+            if isinstance(w, LayerRowWidget):
                 w._thumb_timer.start()
             if child_item.childCount() > 0 and child_item.isExpanded():
                 self._on_item_expanded(child_item)
