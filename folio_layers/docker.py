@@ -9,7 +9,8 @@ from .qt_compat import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QToolButton, QPushButton,
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer, QFileDialog,
     Qt, QSize, QRect, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
-    QEvent, QPainter, QPen, QPoint, QPointF, QMouseEvent, QPropertyAnimation, QEasingCurve, QLayout, QDrag
+    QEvent, QPainter, QPen, QPoint, QPointF, QMouseEvent, QPropertyAnimation, QEasingCurve, QLayout, QDrag,
+    mouse_point
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
@@ -275,7 +276,7 @@ class LayerTreeWidget(QTreeWidget):
     @staticmethod
     def _make_mouse_event(ev_type, local, global_pos, button, buttons, modifiers):
         """构造鼠标事件，兼容 PyQt6 / PyQt5 构造函数差异"""
-        if hasattr(QEvent, 'Type'):  # PyQt6: (type, localPos, globalPos, button, buttons, modifiers)
+        if hasattr(QMouseEvent, 'position'):  # PyQt6: (type, localPos, globalPos, button, buttons, modifiers)
             return QMouseEvent(ev_type, QPointF(local), QPointF(global_pos), button, buttons, modifiers)
         # PyQt5: (type, localPos, button, buttons, modifiers)
         return QMouseEvent(ev_type, QPointF(local), button, buttons, modifiers)
@@ -362,7 +363,7 @@ class LayerTreeWidget(QTreeWidget):
                 return super().eventFilter(obj, event)
             if ev_type == _move_t and event.buttons() == Qt.NoButton:
                 # 悬停移动：不拦截，让 Qt 原生合成 spontaneous 事件以触发 tooltip/高亮
-                self._pen_log("[pen] hover bypass %s pos=%s" % (getattr(ev_type, 'name', ev_type), event.position().toPoint()))
+                self._pen_log("[pen] hover bypass %s pos=%s" % (getattr(ev_type, 'name', ev_type), mouse_point(event)))
                 return super().eventFilter(obj, event)
             if ev_type == rel_t and self._pen_grab is None:
                 # 无按压状态的释放（异常路径）：不处理
@@ -573,7 +574,7 @@ class LayerTreeWidget(QTreeWidget):
 
     def mousePressEvent(self, event):
         """记录点击起点，关闭其他划出的面板，并在点击空白区域时不取消选中"""
-        self._pen_log("[pen] tree mousePress pos=%s buttons=%s" % (event.position().toPoint(), event.buttons()))
+        self._pen_log("[pen] tree mousePress pos=%s buttons=%s" % (mouse_point(event), event.buttons()))
         self._close_all_swipes()
         item = self.itemAt(event.pos())
         if item is None:
@@ -592,7 +593,10 @@ class LayerTreeWidget(QTreeWidget):
         此时同样走自定义拖拽（不依赖 QDragManager 消费 spontaneous 事件）"""
         try:
             src = event.source()
-            return src == Qt.MouseEventSource.MouseEventSynthesizedByQt
+            src_enum = getattr(Qt, 'MouseEventSource', None) or getattr(QMouseEvent, 'MouseEventSource', None)
+            if src_enum is None:
+                return False
+            return src == src_enum.MouseEventSynthesizedByQt
         except Exception:
             return False
 
@@ -653,10 +657,10 @@ class LayerTreeWidget(QTreeWidget):
     def mouseReleaseEvent(self, event):
         """数位笔拖拽完成：执行重排序"""
         if (self._pen_active or self._event_is_pen_synth(event)) and getattr(self, '_pen_dragging', False):
-            self._pen_log("[pen] CUSTOM-DROP release at %s" % (event.position().toPoint()))
+            self._pen_log("[pen] CUSTOM-DROP release at %s" % (mouse_point(event),))
             self._pen_dragging = False
             self._hide_pen_ghost()
-            self._finish_pen_drop(event.position().toPoint())
+            self._finish_pen_drop(mouse_point(event))
             self._pen_drag_item = None
             self._pen_drag_pos = None
             self._scroll_dir = 0

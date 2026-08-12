@@ -64,3 +64,17 @@ except ImportError:
     )
     from PyQt5.QtQuickWidgets import QQuickWidget
     from PyQt5.QtSvg import QSvgRenderer
+
+
+def mouse_x(event):
+    """鼠标事件 x 坐标，兼容 Qt5（pos）与 Qt6（position）"""
+    if hasattr(event, 'position'):
+        return event.position().x()
+    return event.pos().x()
+
+
+def mouse_point(event):
+    """鼠标事件整数坐标 QPoint，兼容 Qt5（pos）与 Qt6（position.toPoint）"""
+    if hasattr(event, 'position'):
+        return event.position().toPoint()
+    return event.pos()
