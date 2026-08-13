@@ -48,22 +48,23 @@ try:
                 setattr(QPainter, name, getattr(QPainter.RenderHint, name))
 
 except ImportError:
-    from PyQt5.QtCore import (
+    # PyQt5 仅在 Krita 5.x 自带 Python 环境存在，开发机/静态分析器不可见
+    from PyQt5.QtCore import (  # type: ignore[import-not-found]
         Qt, pyqtSignal, pyqtSlot, QSize, QPoint, QPointF, QRect, QEvent, QTimer, QByteArray,
         QMimeData, QSettings, QPropertyAnimation, QEasingCurve, QAbstractListModel, QModelIndex, QVariant, QUrl
     )
-    from PyQt5.QtGui import (
+    from PyQt5.QtGui import (  # type: ignore[import-not-found]
         QPainter, QColor, QFont, QPen, QBrush, QIcon, QPixmap, QImage, QCursor, QDrag,
         QPalette, QMouseEvent
     )
-    from PyQt5.QtWidgets import (
+    from PyQt5.QtWidgets import (  # type: ignore[import-not-found]
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QToolButton,
         QScrollArea, QSizePolicy, QApplication, QFrame, QInputDialog, QMenu,
         QTreeWidget, QTreeWidgetItem, QSlider, QComboBox, QSpinBox, QGraphicsDropShadowEffect, QGraphicsOpacityEffect,
         QHeaderView, QLineEdit, QAction, QAbstractItemView, QDialog, QCheckBox, QGroupBox, QLayout, QFileDialog
     )
-    from PyQt5.QtQuickWidgets import QQuickWidget
-    from PyQt5.QtSvg import QSvgRenderer
+    from PyQt5.QtQuickWidgets import QQuickWidget  # type: ignore[import-not-found]
+    from PyQt5.QtSvg import QSvgRenderer  # type: ignore[import-not-found]
 
 
 def mouse_x(event):
@@ -78,3 +79,10 @@ def mouse_point(event):
     if hasattr(event, 'position'):
         return event.position().toPoint()
     return event.pos()
+
+
+def mouse_global_point(event):
+    """鼠标事件全局整数坐标 QPoint，兼容 Qt5（globalPos 返回 QPoint）与 Qt6（globalPosition 返回 QPointF）"""
+    if hasattr(event, 'globalPosition'):
+        return event.globalPosition().toPoint()
+    return event.globalPos()

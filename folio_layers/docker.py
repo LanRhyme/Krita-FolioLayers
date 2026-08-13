@@ -10,7 +10,7 @@ from .qt_compat import (
     QTreeWidget, QTreeWidgetItem, QLineEdit, QFrame, QMenu, QAction, QTimer, QFileDialog,
     Qt, QSize, QRect, QCursor, QApplication, QHeaderView, QAbstractItemView, QColor, QPalette,
     QEvent, QPainter, QPen, QPoint, QPointF, QMouseEvent, QPropertyAnimation, QEasingCurve, QLayout, QDrag,
-    mouse_point
+    mouse_point, mouse_global_point
 )
 from .lucide_icons import get_lucide_icon, get_lucide_pixmap, clear_icon_cache
 from .hover_preview import HoverPreviewPopup, COLOR_LABEL_MAP
@@ -25,7 +25,7 @@ from .config import get_config
 from .color_label_popup import build_color_label_menu
 
 try:
-    from krita import DockWidget, Krita
+    from krita import DockWidget, Krita  # type: ignore[import-not-found]  # 仅 Krita 运行时提供
     IN_KRITA = True
 except ImportError:
     IN_KRITA = False
@@ -44,7 +44,7 @@ class FlowLayout(QLayout):
         self._v_spacing = v_spacing
         self._items = []
 
-    def addItem(self, item):
+    def addItem(self, item):  # type: ignore[override]
         self._items.append(item)
 
     def count(self):
@@ -60,7 +60,7 @@ class FlowLayout(QLayout):
             return self._items.pop(index)
         return None
 
-    def expandingDirections(self):
+    def expandingDirections(self):  # type: ignore[override]
         # 不向任意方向扩展
         try:
             return Qt.Orientation(0)
@@ -70,10 +70,10 @@ class FlowLayout(QLayout):
     def hasHeightForWidth(self):
         return True
 
-    def heightForWidth(self, width):
+    def heightForWidth(self, width):  # type: ignore[override]
         return self._flow(QRect(0, 0, width, 0), True)
 
-    def setGeometry(self, rect):
+    def setGeometry(self, rect):  # type: ignore[override]
         super().setGeometry(rect)
         self._flow(rect, False)
 
@@ -300,17 +300,17 @@ class LayerTreeWidget(QTreeWidget):
                 return
             self._last_pen_move_ts = now
 
-        global_pos = event.globalPosition() if hasattr(event, 'globalPosition') else event.globalPos()
+        global_pos = mouse_global_point(event)
 
         if ev_type == press_t:
             self._pen_active = True
             # 笔按下：锁定触点下方最深控件，模拟 Qt 的 qt_button_down 抓取语义
-            w = QApplication.widgetAt(global_pos.toPoint())
+            w = QApplication.widgetAt(global_pos)
             if w is None or not (w == self or self.isAncestorOf(w)):
                 w = viewport
             self._pen_grab = w
             self._pen_log("[pen] press grab=%s buttons=%s pos=%s" % (
-                w.__class__.__name__ if w else None, event.buttons(), global_pos.toPoint()))
+                w.__class__.__name__ if w else None, event.buttons(), global_pos))
 
         receiver = self._pen_grab if self._pen_grab is not None else viewport
 
@@ -320,7 +320,7 @@ class LayerTreeWidget(QTreeWidget):
             rel_t: getattr(QEvent, 'MouseButtonRelease', getattr(getattr(QEvent, 'Type', None), 'MouseButtonRelease', None)),
         }[ev_type]
 
-        local = receiver.mapFromGlobal(global_pos.toPoint())
+        local = receiver.mapFromGlobal(global_pos)
         me = self._make_mouse_event(mouse_type, local, global_pos, event.button(), event.buttons(), event.modifiers())
         try:
             me._folio_pen = True  # 标记为笔转译事件（自定义拖拽用）
@@ -338,9 +338,9 @@ class LayerTreeWidget(QTreeWidget):
         vp = self.viewport()
         if not vp.isVisible():
             return False
-        gp = event.globalPosition() if hasattr(event, 'globalPosition') else event.globalPos()
+        gp = mouse_global_point(event)
         vp_tl = vp.mapToGlobal(QPoint(0, 0))
-        return vp.rect().translated(vp_tl).contains(gp.toPoint())
+        return vp.rect().translated(vp_tl).contains(gp)
 
     def _is_native_drag_active(self):
         """QDrag::exec 拖拽循环中：此时必须让 Qt 原生合成鼠标事件
@@ -2740,7 +2740,7 @@ class FolioLayersDocker(DockWidget if IN_KRITA else QWidget):
         try:
             from PyQt6.QtWidgets import QWidgetAction
         except ImportError:
-            from PyQt5.QtWidgets import QWidgetAction
+            from PyQt5.QtWidgets import QWidgetAction  # type: ignore[import-not-found]
 
         from .qt_compat import QWidget, QHBoxLayout
         from .color_label_popup import ColorSwatchButton
